@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#ff8fc7" />
+  <title>Glitter &amp; Glam — Dress Up!</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #ffd9ec;
+      overscroll-behavior: none;
+      touch-action: none;
+      -webkit-user-select: none; user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #game, #game canvas { width: 100%; height: 100%; display: block; }
+    /* Rounded, friendly font stack for PIXI.Text (registered as "GameFont"). */
+    @font-face {
+      font-family: 'GameFont';
+      src: local('Comic Sans MS'), local('Chalkboard SE'), local('Comic Neue'), local('Arial Rounded MT Bold');
+      font-weight: normal;
+    }
+    #splash {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: linear-gradient(#ffd9ec, #ffabd3);
+      font-family: 'Comic Sans MS', 'Chalkboard SE', 'Segoe UI', sans-serif;
+      color: #c2447c;
+      transition: opacity .5s;
+    }
+    #splash.hidden { opacity: 0; pointer-events: none; }
+    #splash .heart { font-size: 64px; animation: beat 1s ease-in-out infinite; }
+    #splash h1 { font-size: 28px; margin-top: 12px; text-shadow: 0 2px 0 #fff; }
+    #splash p { margin-top: 6px; font-size: 15px; opacity: .8; }
+    @keyframes beat { 0%,100% { transform: scale(1); } 50% { transform: scale(1.25); } }
+  </style>
+</head>
+<body>
+  <div id="splash">
+    <div class="heart">💖</div>
+    <h1>Glitter &amp; Glam</h1>
+    <p>lacing up the sparkles…</p>
+  </div>
+  <div id="game"></div>
+  <script src="vendor/pixi.min.js"></script>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
