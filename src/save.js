@@ -23,6 +23,8 @@ const DEFAULTS = {
   sound: true,
   seenIntro: {},       // gameId -> true once instructions have been read
   lastGift: '',        // YYYY-MM-DD of last claimed daily gift
+  giftStreak: 0,       // consecutive days the gift was claimed
+  boostLeft: 3,        // first plays pay double coins (welcome boost)
   theme: 'day',        // 'day' | 'night'
 };
 
@@ -97,15 +99,30 @@ function today() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function yesterday() {
+  const d = new Date(Date.now() - 86400000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function giftAvailable() { return save.lastGift !== today(); }
 
-/** Claim the daily gift. Returns coins granted (0 if already claimed). */
+/** Claim the daily gift. Returns { amount, streak } (amount 0 if already claimed).
+ *  Claiming on consecutive days grows a streak that raises the payout. */
 export function claimGift() {
-  if (!giftAvailable()) return 0;
-  const amount = 60 + level() * 15;
+  if (!giftAvailable()) return { amount: 0, streak: save.giftStreak };
+  save.giftStreak = save.lastGift === yesterday() ? save.giftStreak + 1 : 1;
+  const amount = 60 + level() * 15 + Math.min(5, save.giftStreak - 1) * 25;
   save.lastGift = today();
   earnCoins(amount);
-  return amount;
+  return { amount, streak: save.giftStreak };
+}
+
+/** Consume one charge of the welcome boost (first games pay double). */
+export function useBoost() {
+  if (save.boostLeft <= 0) return false;
+  save.boostLeft--;
+  persist();
+  return true;
 }
 
 export function recordScore(gameId, score) {

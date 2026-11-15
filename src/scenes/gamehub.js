@@ -35,6 +35,15 @@ export class GameHubScene {
     sub.position.set(W / 2, 122);
     r.addChild(sub);
 
+    if (save.boostLeft > 0) {
+      const boost = new PIXI.Text(`✨ Your next ${save.boostLeft === 1 ? 'game pays' : save.boostLeft + ' games pay'} DOUBLE coins! ✨`, textStyle(16, 0xffe08a, 0xc2447c, 4));
+      boost.anchor.set(0.5);
+      boost.position.set(W / 2, 148);
+      if (boost.width > W - 30) boost.scale.set((W - 30) / boost.width);
+      r.addChild(boost);
+      tween(boost.scale, { x: boost.scale.x * 1.06, y: boost.scale.y * 1.06 }, 550, { ease: Ease.sineInOut, yoyo: true, repeat: -1 });
+    }
+
     // grid of cards
     const areaTop = 150;
     const areaH = H - areaTop - 70;

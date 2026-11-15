@@ -356,6 +356,12 @@ export class MenuScene {
     label.anchor.set(0.5);
     label.y = 34;
     c.addChild(label);
+    if (save.giftStreak >= 2) {
+      const streakT = new PIXI.Text(`🔥 day ${save.giftStreak}`, textStyle(11, 0xffe08a, 0x8a3060, 3));
+      streakT.anchor.set(0.5);
+      streakT.y = 50;
+      c.addChild(streakT);
+    }
     c.position.set(pos.x, pos.y);
     c.eventMode = 'static';
     c.cursor = 'pointer';
@@ -365,10 +371,11 @@ export class MenuScene {
         floatText(pos.x, pos.y - 40, 'Come back tomorrow! ✨', { size: 18, fill: 0xffffff, stroke: 0x9a8aa8 });
         return;
       }
-      const amount = claimGift();
+      const { amount, streak } = claimGift();
       Sfx.buy();
       sparkleBurst(pos.x, pos.y, { n: 20, power: 1.2 });
-      floatText(pos.x, pos.y - 46, `Daily gift +${amount}!`, { size: 22, fill: 0xffe08a });
+      floatText(pos.x, pos.y - 46, streak >= 2 ? `Day ${streak} streak! +${amount}` : `Daily gift +${amount}!`, { size: 22, fill: 0xffe08a });
+      if (streak >= 2) floatText(pos.x, pos.y - 76, 'Come back daily — it grows! 🔥', { size: 15, fill: 0xffffff, stroke: 0xd66d9e, dur: 1600 });
       const tgt = this.hud.coinTarget();
       coinFly(pos.x, pos.y, tgt.x, tgt.y, 8, () => this.hud.bumpCoin());
       this.buildGift(pos);

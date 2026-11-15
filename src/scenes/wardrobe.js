@@ -20,7 +20,9 @@ export class WardrobeScene {
     const r = this.root;
     r.addChild(makeBackground(W, H, 0xf3e4ff, 0xe3c8fa, 0xffffff));
     const portrait = H > W * 0.9;
+    this.portrait = portrait;
     this.cat = this.params.cat || 'dress';
+    this.preview = null; // item being tried on (not yet owned)
 
     // ---- character preview area ----
     const charAreaW = portrait ? W : W * 0.42;
@@ -147,9 +149,16 @@ export class WardrobeScene {
     }
   }
 
+  /** Equipped set plus whatever is being tried on. */
+  effEq() {
+    const eq = { ...save.eq };
+    if (this.preview) eq[this.preview.cat] = this.preview.id;
+    return eq;
+  }
+
   renderChar() {
     if (this.char && !this.char.destroyed) this.char.destroy({ children: true });
-    this.char = characterAtHeight(save.eq, save.skin, this.charSpot.h);
+    this.char = characterAtHeight(this.effEq(), save.skin, this.charSpot.h);
     this.char.position.set(this.charSpot.x, this.charSpot.y + this.charSpot.h / 2);
     this.root.addChild(this.char);
     // pop
@@ -324,15 +333,9 @@ export class WardrobeScene {
   }
 
   onCardTap(it, card, gp) {
-    const lv = level();
-    if (lv < it.lvl) {
-      Sfx.bad();
-      shake(card, 6, 250);
-      floatText(gp.x, gp.y - 20, `Reach Lv ${it.lvl}!`, { fill: 0xffffff, stroke: 0x9a8aa8 });
-      return;
-    }
     if (isOwned(it.id)) {
       // toggle equip
+      if (this.preview) this.clearPreview(false);
       const isOn = save.eq[it.cat] === it.id;
       const required = ['hair', 'dress', 'shoes'].includes(it.cat);
       if (isOn && required) { Sfx.tap(); return; }
@@ -343,9 +346,81 @@ export class WardrobeScene {
       this.buildGrid();
       return;
     }
+    // Not owned (locked or not): try it on first — dressing up IS the game.
+    this.preview = it;
+    Sfx.equip();
+    sparkleBurst(this.char.x, this.char.y - this.charSpot.h / 2, { n: 14 });
+    this.renderChar();
+    this.buildTryBar();
+  }
+
+  clearPreview(rerender = true) {
+    this.preview = null;
+    if (this.tryBar && !this.tryBar.destroyed) this.tryBar.destroy({ children: true });
+    this.tryBar = null;
+    if (rerender) this.renderChar();
+  }
+
+  buildTryBar() {
+    if (this.tryBar && !this.tryBar.destroyed) this.tryBar.destroy({ children: true });
+    const it = this.preview;
+    if (!it) return;
+    const lv = level();
+    const locked = lv < it.lvl;
+    const afford = save.coins >= it.price;
+    const bar = new PIXI.Container();
+
+    const name = new PIXI.Text('Trying: ' + it.name, textStyle(16, 0xffffff, PALETTE.pinkDark, 4));
+    name.anchor.set(0.5);
+    const buyLabel = locked ? `🔒 Lv ${it.lvl}` : it.price === 0 ? 'Free!' : `Buy ${fmt(it.price)} 🪙`;
+    const buy = makeButton(buyLabel, {
+      w: Math.max(130, buyLabel.length * 11 + 40), h: 46,
+      color: locked ? 0x9a8aa8 : afford ? PALETTE.mint : PALETTE.pink,
+      fontSize: 17,
+      onTap: () => this.tryBuy(it),
+    });
+    const close = iconButton('close', 40, 0xb9a8b8, () => this.clearPreview());
+
+    const w = Math.max(name.width + 24, buy.width + close.width + 76);
+    const bg = new PIXI.Graphics();
+    bg.beginFill(0x8a3060, 0.88);
+    bg.drawRoundedRect(-w / 2 - 10, -44, w + 20, 96, 24);
+    bg.endFill();
+    bg.lineStyle({ width: 3, color: 0xffd35c, alpha: 0.9 });
+    bg.drawRoundedRect(-w / 2 - 10, -44, w + 20, 96, 24);
+    bg.lineStyle(0);
+    bar.addChild(bg);
+    name.y = -24;
+    bar.addChild(name);
+    buy.position.set(-close.width / 2 - 8, 22);
+    bar.addChild(buy);
+    close.position.set(buy.x + buy.width / 2 + 34, 22);
+    bar.addChild(close);
+
+    bar.position.set(
+      this.charSpot.x,
+      // below the character's feet so the previewed outfit stays fully visible
+      this.charSpot.y + this.charSpot.h / 2 + (this.portrait ? 52 : 64),
+    );
+    bar.scale.set(0.7);
+    tween(bar.scale, { x: 1, y: 1 }, 320, { ease: Ease.backOut });
+    this.root.addChild(bar);
+    this.tryBar = bar;
+    if (this.hud) this.root.addChild(this.hud);
+  }
+
+  tryBuy(it) {
+    const gp = { x: this.charSpot.x, y: this.charSpot.y };
+    const lv = level();
+    if (lv < it.lvl) {
+      Sfx.bad();
+      shake(this.tryBar, 6, 250);
+      floatText(gp.x, gp.y - 20, `Reach Lv ${it.lvl} — play minigames!`, { size: 18, fill: 0xffffff, stroke: 0x9a8aa8 });
+      return;
+    }
     if (!spendCoins(it.price)) {
       Sfx.bad();
-      shake(card, 6, 250);
+      shake(this.tryBar, 6, 250);
       floatText(gp.x, gp.y - 20, 'Need more coins!', { fill: 0xffffff, stroke: 0xd1274b });
       floatText(gp.x, gp.y + 8, 'Play minigames to earn ✨', { size: 18, fill: 0xffffff, stroke: 0xd66d9e, dur: 1300 });
       return;
@@ -353,6 +428,7 @@ export class WardrobeScene {
     // bought!
     ownItem(it.id);
     equip(it.cat, it.id);
+    this.clearPreview(false);
     Sfx.buy();
     sparkleBurst(gp.x, gp.y, { n: 20, power: 1.3 });
     floatText(gp.x, gp.y - 30, it.name + ' ♥', { fill: 0xffe08a });

@@ -9,6 +9,7 @@ import { createCharacter } from '../character.js';
 import { sparkleBurst, confetti, floatHearts, floatText, coinFly } from '../effects.js';
 import { tween, Ease, delay, killTweensOf } from '../tween.js';
 import { Sfx } from '../sound.js';
+import { gameplayStart, gameplayStop, happytime } from '../portal.js';
 import { rand, randi, choice, shuffle, fmt, darken, lighten, mixColor } from '../util.js';
 
 const NPC_NAMES = ['Bella', 'Coco', 'Ruby', 'Luna', 'Mimi', 'Star', 'Posie', 'Violet'];
@@ -279,6 +280,7 @@ export class FashionShowScene {
 
   async runShow() {
     Sfx.fanfare();
+    gameplayStart();
     await this.wait(600);
     for (const c of this.contestants) {
       if (!this.alive) return;
@@ -494,6 +496,8 @@ export class FashionShowScene {
     save.shows++;
     if (playerPlace === 1) save.wins++;
     persist();
+    gameplayStop();
+    if (playerPlace === 1) happytime();
     const placeReward = [300, 150, 80, 40][playerPlace - 1];
     const styleBonus = Math.min(150, Math.round(this.contestants[0].style / 2));
     const total = placeReward + styleBonus;

@@ -34,7 +34,11 @@ Works on desktop and mobile (touch-first, responsive portrait & landscape).
    crowds, camera flashes and an applause meter; judges reveal scores worst-to-
    best and crown Best Dressed. Rarer outfits score higher. Big coin rewards.
 
-A **daily gift** pays bonus coins that scale with your level.
+A **daily gift** pays bonus coins that scale with your level — claiming on
+consecutive days builds a 🔥 streak that raises the payout. Your **first 3
+games pay double coins**, and starter items are priced so the first session
+delivers several unlocks. Any item — even locked ones — can be **tried on**
+in the wardrobe before buying.
 
 🌙 **Night mode**: the moon button on the home screen switches the whole
 boutique into a starry evening theme (crescent moon, deepened colors, brighter
@@ -52,6 +56,9 @@ Progress is saved in `localStorage`.
 - Fully self-contained: no external requests (fonts, CDNs, analytics), no
   login, instant load — iframe-friendly for portals like CrazyGames.
 - Audio starts only after a user gesture (autoplay-policy safe).
+- CrazyGames SDK v3 wired via `src/portal.js` (init, gameplayStart/Stop,
+  happytime on wins/level-ups); every call no-ops when the SDK is absent,
+  so the same build runs anywhere.
 
 ## Tech notes
 

@@ -2,7 +2,8 @@
 // results panel with coin payout flying into the HUD.
 
 import { G } from '../game.js';
-import { save, earnCoins, recordScore, level } from '../save.js';
+import { save, earnCoins, recordScore, level, useBoost } from '../save.js';
+import { gameplayStart, gameplayStop, happytime } from '../portal.js';
 import { makeButton, makeHUD, makeBackground, makePanel, makeIcon, iconButton, textStyle, PALETTE } from '../ui.js';
 import { sparkleBurst, coinFly, confetti, floatText } from '../effects.js';
 import { tween, Ease, delay } from '../tween.js';
@@ -126,6 +127,7 @@ export class MinigameScene {
         tween(t, { alpha: 0 }, 400, { onDone: () => !t.destroyed && t.destroy() });
         this.running = true;
         this.timeLeft = this.duration || 0;
+        gameplayStart();
         this.begin();
         return;
       }
@@ -184,12 +186,16 @@ export class MinigameScene {
     if (!this.root || this.root.destroyed || this.finished) return;
     this.finished = true;
     this.running = false;
+    gameplayStop();
     if (this.cleanup) this.cleanup();
     const { W, H } = this;
-    const coins = Math.max(5, Math.round(this.score * (this.coinRate || 0.5)));
+    let coins = Math.max(5, Math.round(this.score * (this.coinRate || 0.5)));
+    const boosted = useBoost();
+    if (boosted) coins *= 2;
     const isRecord = recordScore(this.id, this.score);
     const before = level();
     const { leveledUp } = earnCoins(coins);
+    if (leveledUp || isRecord) happytime();
 
     const ov = new PIXI.Container();
     const dim = new PIXI.Graphics();
@@ -223,10 +229,19 @@ export class MinigameScene {
     coinRow.position.set(W / 2 - coinRow.width / 2 + 10, H / 2 - 22);
     ov.addChild(coinRow);
 
+    if (boosted) {
+      const bst = new PIXI.Text('✨ ×2 welcome bonus! ✨', textStyle(17, 0xffffff, 0xe0742a, 4));
+      bst.anchor.set(0.5);
+      bst.position.set(W / 2, H / 2 + 6);
+      ov.addChild(bst);
+      tween(bst.scale, { x: 1.08, y: 1.08 }, 450, { ease: Ease.sineInOut, yoyo: true, repeat: -1 });
+    }
+    const subY = boosted ? 36 : 26;
+
     if (leveledUp) {
       const lv = new PIXI.Text(`✨ LEVEL UP! You're Lv ${level()} ✨`, textStyle(20, 0xffffff, PALETTE.purple, 4));
       lv.anchor.set(0.5);
-      lv.position.set(W / 2, H / 2 + 26);
+      lv.position.set(W / 2, H / 2 + subY);
       ov.addChild(lv);
       tween(lv.scale, { x: 1.1, y: 1.1 }, 500, { ease: Ease.sineInOut, yoyo: true, repeat: -1 });
       confetti(W, 60);
@@ -234,7 +249,7 @@ export class MinigameScene {
     } else {
       const hint = new PIXI.Text('New outfits await in the Wardrobe!', textStyle(16, PALETTE.purple, 0xffffff, 0));
       hint.anchor.set(0.5);
-      hint.position.set(W / 2, H / 2 + 26);
+      hint.position.set(W / 2, H / 2 + subY);
       ov.addChild(hint);
     }
 

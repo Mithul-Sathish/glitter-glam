@@ -5,6 +5,7 @@ import { updateTweens, tween, Ease } from './tween.js';
 import { updateEffects, fxLayer, ambientSparkle } from './effects.js';
 import { initSound, setSoundEnabled } from './sound.js';
 import { save } from './save.js';
+import { portalInit } from './portal.js';
 import { MenuScene } from './scenes/menu.js';
 
 const app = new PIXI.Application({
@@ -44,6 +45,7 @@ app.stage.addChild(fxLayer);
 
 setSoundEnabled(save.sound !== false);
 initSound();
+portalInit();
 
 let current = null;
 let switching = false;
