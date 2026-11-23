@@ -1,6 +1,7 @@
 // Boutique hub: your character under a spotlight on a sparkling pedestal,
 // with rich menu cards, live stats, a daily gift and a day/night switch.
 
+import { musicEnabled, setMusicEnabled } from '../music.js';
 import { G } from '../game.js';
 import { save, persist, level, rankFor } from '../save.js';
 import { dailyState, dailyPending, openDailyPanel, todayStr } from '../daily.js';
@@ -236,7 +237,9 @@ export class MenuScene {
     // ---------- sound + theme toggles ----------
     this.soundPos = { x: W - 44, y: H - 44 };
     this.themePos = { x: W - 44 - 58, y: H - 44 };
+    this.musicPos = { x: W - 44 - 174, y: H - 44 };
     this.buildSound();
+    this.buildMusic();
     this.buildThemeToggle();
     const sv = iconButton('save', 48, PALETTE.blue, () => openSaveCode());
     sv.position.set(W - 44 - 116, H - 44);
@@ -253,7 +256,7 @@ export class MenuScene {
         lb.anchor.set(0.5);
         lb.position.set(0, -34);
         c.addChild(lb);
-        c.position.set(W - 44 - 174, H - 44);
+        c.position.set(W - 44 - 232, H - 44);
         r.addChild(c);
         this.acct = c;
       };
@@ -265,6 +268,11 @@ export class MenuScene {
     hint.anchor.set(0.5);
     hint.position.set(portrait ? W / 2 : W * 0.71, portrait ? H - 12 : cardsY0 + 3 * (chh + gap) + 40);
     if (hint.width > W - 110) hint.scale.set((W - 110) / hint.width);
+    if (!portrait && Math.abs(hint.y - (H - 44)) < 44) {
+      // keep the nudge clear of the round buttons in the bottom-right corner
+      const clear = W - 44 - (this.acct ? 232 : 174) - 36;
+      hint.x = Math.min(hint.x, clear - hint.width / 2);
+    }
     hint.alpha = 0.9;
     r.addChild(hint);
 
@@ -407,6 +415,29 @@ export class MenuScene {
     sb.position.set(this.soundPos.x, this.soundPos.y);
     this.root.addChild(sb);
     this.soundBtn = sb;
+  }
+
+  buildMusic() {
+    if (this.musicBtn && !this.musicBtn.destroyed) this.musicBtn.destroy({ children: true });
+    const on = musicEnabled();
+    const mb = new PIXI.Container();
+    mb.addChild(iconButton('note', 48, on ? PALETTE.pink : 0xa99bb0, () => {
+      const v = !musicEnabled();
+      setMusicEnabled(v);
+      save.music = v;
+      persist();
+      this.buildMusic();
+    }));
+    if (!on) {
+      // a slash through the note, like the muted speaker
+      const sl = new PIXI.Graphics();
+      sl.lineStyle({ width: 4, color: 0xffffff, cap: PIXI.LINE_CAP.ROUND });
+      sl.moveTo(-13, 13); sl.lineTo(13, -13);
+      mb.addChild(sl);
+    }
+    mb.position.set(this.musicPos.x, this.musicPos.y);
+    this.root.addChild(mb);
+    this.musicBtn = mb;
   }
 
   buildThemeToggle() {

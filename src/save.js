@@ -44,6 +44,7 @@ const DEFAULTS = {
   bestWinStreak: 0,
   bestShow: 0,         // best runway rating ever (0..10)
   sound: true,
+  music: true,
   seenIntro: {},       // gameId -> true once instructions have been read
   daily: { last: '', streak: 0, best: 0 },  // daily attendance (local dates)
   challenge: { day: '', done: [] },          // today's challenges + which are claimed
