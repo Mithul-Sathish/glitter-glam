@@ -2,8 +2,8 @@
 // wild, judges hold up score cards, and the best outfit takes the crown.
 
 import { G } from '../game.js';
-import { save, earnCoins, persist, level } from '../save.js';
-import { styleScore, randomOutfit, SKINS } from '../items.js';
+import { save, earnCoins, persist, level, todayStats } from '../save.js';
+import { styleScore, randomOutfit, randomLook, SKINS } from '../items.js';
 import { makeButton, makeHUD, makePanel, makeIcon, iconButton, textStyle, PALETTE } from '../ui.js';
 import { createCharacter } from '../character.js';
 import { sparkleBurst, confetti, floatHearts, floatText, coinFly } from '../effects.js';
@@ -77,10 +77,12 @@ export class FashionShowScene {
     const bt = new PIXI.Text('★ FASHION NIGHT ★', textStyle(Math.min(28, bw * 0.055), 0xffe08a, 0x8a1a30, 5));
     bt.anchor.set(0.5);
     banner.addChild(bt);
-    banner.position.set(W / 2, W < 560 ? 100 : 64);
+    const short = H < 520; // sideways phones
+    banner.position.set(W / 2, short ? 30 : (W < 560 ? 100 : 64));
+    if (short) banner.scale.set(0.7);
     r.addChild(banner);
     this.banner = banner;
-    tween(banner.scale, { x: 1.03, y: 1.03 }, 900, { ease: Ease.sineInOut, yoyo: true, repeat: -1 });
+    tween(banner.scale, { x: banner.scale.x * 1.03, y: banner.scale.y * 1.03 }, 900, { ease: Ease.sineInOut, yoyo: true, repeat: -1 });
 
     // ---------- red carpet ----------
     this.carpetY = H * 0.66;
@@ -188,18 +190,37 @@ export class FashionShowScene {
     this.meterFill.position.set(-mw / 2, -10);
     this.meterFill.scale.x = 0;
     this.meter.addChild(this.meterFill);
-    const mlabel = new PIXI.Text('APPLAUSE', textStyle(13, 0xffffff, 0x2a1030, 3));
-    mlabel.anchor.set(0.5);
-    mlabel.y = -30;
+    // tick marks at every point so the bar reads as a 0-10 scale
+    const ticks = new PIXI.Graphics();
+    for (let i = 1; i < 10; i++) {
+      ticks.beginFill(0x2a1030, i === 5 ? 0.55 : 0.3);
+      ticks.drawRect(-mw / 2 + (mw / 10) * i - 1, -10, 2, 20);
+      ticks.endFill();
+    }
+    this.meter.addChild(ticks);
+    const mlabel = new PIXI.Text('JUDGES\' RATING', textStyle(13, 0xffffff, 0x2a1030, 3));
+    mlabel.anchor.set(0, 0.5);
+    mlabel.position.set(-mw / 2, -30);
     this.meter.addChild(mlabel);
-    this.meter.position.set(W / 2, H * 0.28);
+    this.meterNum = new PIXI.Text('0.0 / 10', textStyle(18, 0xffe08a, 0x2a1030, 4));
+    this.meterNum.anchor.set(1, 0.5);
+    this.meterNum.position.set(mw / 2, -31);
+    this.meter.addChild(this.meterNum);
+    for (const [txt, fx] of [['0', -mw / 2], ['5', 0], ['10', mw / 2]]) {
+      const tl = new PIXI.Text(txt, textStyle(11, 0xffffff, 0x2a1030, 3));
+      tl.anchor.set(0.5);
+      tl.position.set(fx, 25);
+      this.meter.addChild(tl);
+    }
+    this.meter.position.set(W / 2, short ? 118 : H * 0.28);
     this.meter.alpha = 0;
     r.addChild(this.meter);
 
     // name tag for whoever is on the carpet
     this.nameTag = new PIXI.Text('', textStyle(24, 0xffffff, 0x8a1a5e, 5));
     this.nameTag.anchor.set(0.5);
-    this.nameTag.position.set(W / 2, this.carpetY - 130 - H * 0.30);
+    this.nameTag.position.set(W / 2, short ? 68 : this.carpetY - 130 - H * 0.30);
+    if (short) this.nameTag.scale.set(0.8);
     this.nameTag.alpha = 0;
     r.addChild(this.nameTag);
 
@@ -222,15 +243,25 @@ export class FashionShowScene {
     const lv = level();
     const names = shuffle(NPC_NAMES).slice(0, 3);
     this.contestants = [
-      { name: 'You ♥', eq: save.eq, skin: save.skin, isPlayer: true, style: styleScore(save.eq) },
+      { name: 'You ♥', eq: save.eq, skin: save.skin, look: save.look, isPlayer: true, style: styleScore(save.eq) },
       ...names.map((name) => {
         const eq = randomOutfit(lv);
-        return { name, eq, skin: randi(0, SKINS.length - 1), isPlayer: false, style: styleScore(eq) };
+        return { name, eq, skin: randi(0, SKINS.length - 1), look: randomLook(), isPlayer: false, style: styleScore(eq) };
       }),
     ];
     // final scores with a dash of judge whimsy (player gets a tiny home-crowd edge)
     for (const c of this.contestants) {
       c.score = c.style * (c.isPlayer ? rand(0.92, 1.15) : rand(0.82, 1.08));
+      // ONE rating, always out of 10, used by the applause bar, the number
+      // beside it and the final score card. It rises quickly for early
+      // outfits and flattens near the top, so it can never pass 10.
+      c.rating = Math.min(10, Math.round(10 * (4 + 6 * (1 - Math.exp(-c.score / 350)))) / 10);
+    }
+    // no exact ties: nudge later contestants down a tenth
+    const seen = new Set();
+    for (const c of [...this.contestants].sort((a, b) => b.score - a.score)) {
+      while (seen.has(c.rating) && c.rating > 0.1) c.rating = Math.round((c.rating - 0.1) * 10) / 10;
+      seen.add(c.rating);
     }
   }
 
@@ -293,7 +324,7 @@ export class FashionShowScene {
   async walkOne(c) {
     const { W, H } = this;
     const charH = Math.min(H * 0.34, 300);
-    const ch = createCharacter(c.eq, c.skin);
+    const ch = createCharacter(c.eq, c.skin, { look: c.look });
     const s = charH / 560;
     ch.scale.set(s);
     ch.position.set(-80, this.carpetY + 50);
@@ -336,11 +367,13 @@ export class FashionShowScene {
     this.meter.alpha = 0;
     this.meterFill.scale.x = 0;
     tween(this.meter, { alpha: 1 }, 250);
-    const frac = Math.min(1, c.score / 220);
+    const frac = c.rating / 10;
+    this.meterNum.text = '0.0 / 10';
     await new Promise((res) => {
       tween(this.meterFill.scale, { x: frac }, 1000, {
         ease: Ease.quadOut,
-        onUpdate: () => {
+        onUpdate: (e) => {
+          this.meterNum.text = (c.rating * e).toFixed(1) + ' / 10';
           if (Math.random() < 0.2) {
             Sfx.clap();
             this.flash();
@@ -350,8 +383,9 @@ export class FashionShowScene {
         onDone: res,
       });
     });
+    this.meterNum.text = c.rating.toFixed(1) + ' / 10';
     if (!this.alive) return;
-    floatText(W / 2, H * 0.28 + 44, this.applauseWord(frac), { size: 30, fill: 0xffe08a, stroke: 0x8a1a5e });
+    floatText(W / 2, H * 0.28 + 64, this.applauseWord(frac), { size: 30, fill: 0xffe08a, stroke: 0x8a1a5e });
     await this.wait(500);
     if (!this.alive || ch.destroyed) return;
 
@@ -376,9 +410,9 @@ export class FashionShowScene {
   }
 
   applauseWord(frac) {
-    if (frac > 0.85) return 'STUNNING!';
-    if (frac > 0.65) return 'Gorgeous!';
-    if (frac > 0.45) return 'Lovely!';
+    if (frac >= 0.9) return 'STUNNING!';
+    if (frac >= 0.7) return 'Gorgeous!';
+    if (frac >= 0.45) return 'Lovely!';
     return 'Cute!';
   }
 
@@ -463,7 +497,7 @@ export class FashionShowScene {
       nm.anchor.set(0, 0.5);
       nm.x = -cardW / 2 + 18;
       row.addChild(nm);
-      const sc = new PIXI.Text((c.score / 22).toFixed(1), textStyle(24, place === 1 ? 0xc78a00 : 0xa66ae0, 0xffffff, 0));
+      const sc = new PIXI.Text(c.rating.toFixed(1) + ' / 10', textStyle(22, place === 1 ? 0xc78a00 : 0xa66ae0, 0xffffff, 0));
       sc.anchor.set(1, 0.5);
       sc.x = cardW / 2 - 18;
       row.addChild(sc);
@@ -494,14 +528,22 @@ export class FashionShowScene {
 
     // rewards
     save.shows++;
-    if (playerPlace === 1) save.wins++;
+    todayStats().shows++;
+    const mine = this.contestants[0];
+    save.bestShow = Math.max(save.bestShow || 0, mine.rating);
+    if (playerPlace === 1) {
+      save.wins++;
+      save.winStreak = (save.winStreak || 0) + 1;
+      save.bestWinStreak = Math.max(save.bestWinStreak || 0, save.winStreak);
+    } else save.winStreak = 0;
     persist();
     gameplayStop();
     if (playerPlace === 1) happytime();
     const placeReward = [300, 150, 80, 40][playerPlace - 1];
     const styleBonus = Math.min(150, Math.round(this.contestants[0].style / 2));
     const total = placeReward + styleBonus;
-    const { leveledUp } = earnCoins(total);
+    const { leveledUp, levels } = earnCoins(total);
+    const lvBonus = levels.reduce((a, l) => a + l.reward, 0);
 
     await this.wait(1100);
     if (!this.alive) return;
@@ -523,11 +565,12 @@ export class FashionShowScene {
     coinRow.y = -36;
     panel.addChild(coinRow);
     const tip = new PIXI.Text(
-      leveledUp ? `✨ LEVEL UP! You're Lv ${level()} ✨` : playerPlace === 1 ? 'The judges adored your look!' : 'Rarer outfits impress the judges more!',
+      leveledUp ? `LEVEL UP! Lv ${level()}  +${fmt(lvBonus)} bonus coins` : playerPlace === 1 ? (save.winStreak > 1 ? `${save.winStreak} wins in a row! Your rating: ${mine.rating.toFixed(1)} / 10` : `Your rating: ${mine.rating.toFixed(1)} / 10`) : `Your rating: ${mine.rating.toFixed(1)} / 10 — rarer outfits score higher!`,
       textStyle(17, PALETTE.purple, 0xffffff, 0),
     );
     tip.anchor.set(0.5);
     tip.y = 4;
+    if (tip.width > pw - 30) tip.scale.set((pw - 30) / tip.width);
     panel.addChild(tip);
     const again = makeButton('Encore!', { w: pw * 0.4, h: 56, color: PALETTE.gold, fontSize: 20, onTap: () => G.go(FashionShowScene) });
     again.position.set(-pw * 0.22, 66);
@@ -541,10 +584,27 @@ export class FashionShowScene {
     });
     home.position.set(pw * 0.22, 66);
     panel.addChild(home);
-    panel.position.set(W / 2, H * 0.60);
+    // Keep the reward panel clear of the score cards on every screen shape.
+    const rowsBottom = rowsC.y + 3 * 56 + 28;
+    let pk = 1;
+    if (rowsBottom + 262 <= H) {
+      panel.position.set(W / 2, Math.max(H * 0.60, rowsBottom + 133));
+    } else if (W > H * 1.3) {
+      // short, wide screens (sideways phones): cards on the left, rewards on the right
+      const rk = Math.min(1, (W * 0.5 - 16) / cardW, (H - 70) / 200);
+      rowsC.scale.set(rk);
+      rowsC.position.set(W * 0.26, 66 + 26 * rk);
+      wt.position.set(W / 2, 28);
+      wt.scale.set(Math.min(0.7, (W - 440) / wt.width));
+      pk = Math.min(1, (H - 12) / 250, (W * 0.48 - 12) / pw);
+      panel.position.set(W * 0.74, H / 2);
+    } else {
+      pk = Math.max(0.6, Math.min(1, (H - rowsBottom - 8) / 250));
+      panel.position.set(W / 2, H - 4 - 125 * pk);
+    }
     panel.scale.set(0);
     this.root.addChild(panel);
-    tween(panel.scale, { x: 1, y: 1 }, 450, { ease: Ease.backOut });
+    tween(panel.scale, { x: pk, y: pk }, 450, { ease: Ease.backOut });
     coinFly(W / 2, H * 0.4, W - 130, 34, 10, () => this.hud.bumpCoin());
   }
 

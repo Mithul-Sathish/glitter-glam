@@ -1,4 +1,4 @@
-// Sparkle Simon: four gems twinkle in a sequence — repeat it!
+// Encore: four gems twinkle in a sequence — repeat it!
 // Each round adds a gem. Three slips and the show is over.
 
 import { MinigameScene } from '../minigame.js';
@@ -6,8 +6,7 @@ import { G } from '../../game.js';
 import { sparkleBurst, floatText } from '../../effects.js';
 import { tween, Ease, delay } from '../../tween.js';
 import { Sfx } from '../../sound.js';
-import { randi, drawDiamond, lighten, darken } from '../../util.js';
-import { makeIcon } from '../../ui.js';
+import { randi, drawDiamond, drawHeart, lighten, darken } from '../../util.js';
 
 const GEMS = [
   { color: 0xff5f9e, pos: [0, -1] },
@@ -20,9 +19,9 @@ export class SimonScene extends MinigameScene {
   constructor(p) {
     super(p);
     this.id = 'simon';
-    this.title = 'Sparkle Simon';
+    this.title = 'Encore';
     this.icon = 'simon';
-    this.howTo = 'Watch the gems light up, then tap them back in the same order. Every round adds one more sparkle. 3 slips = show over!';
+    this.howTo = 'Watch the gems light up, then tap them back in the same order. Every round adds one more sparkle. You have 3 lives (top of the screen). Keys: arrows or 1-4.';
     this.duration = 0;
     this.coinRate = 0.4;
     this.bgTop = 0xfbe6d8;
@@ -37,9 +36,15 @@ export class SimonScene extends MinigameScene {
     this.acceptInput = false;
     this.timerText.text = '';
 
-    const cx = W / 2, cy = H / 2 + 20;
-    const spread = Math.min(W, H) * 0.21;
-    const size = Math.min(W, H) * 0.16;
+    // Fit all four gems between the status line and the bottom edge, even on
+    // sideways phones where the screen is very short.
+    const top = 112, avail = H - top - 10;
+    let spread = Math.min(W, H) * 0.21;
+    let size = Math.min(W, H) * 0.16;
+    const need = 2 * (spread * 1.35 + size * 1.25);
+    const fitK = Math.min(1, avail / need);
+    spread *= fitK; size *= fitK;
+    const cx = W / 2, cy = fitK < 1 ? top + avail / 2 : H / 2 + 34;
     this.gems = GEMS.map((gem, i) => {
       const c = new PIXI.Container();
       const g = new PIXI.Graphics();
@@ -74,12 +79,14 @@ export class SimonScene extends MinigameScene {
       fill: 0xc2447c, stroke: 0xffffff, strokeThickness: 5,
     });
     this.statusText.anchor.set(0.5);
-    this.statusText.position.set(W / 2, 100);
+    this.statusText.position.set(W / 2, 92);
     this.playLayer.addChild(this.statusText);
 
+    // lives sit in the dark score bar, well away from the gems, in red with a
+    // white rim so they can never be mistaken for the pink gem
     this.heartsC = new PIXI.Container();
-    this.heartsC.position.set(W / 2, 140);
-    this.playLayer.addChild(this.heartsC);
+    this.heartsC.position.set(this.headerSlot.x, this.headerSlot.y);
+    this.head.addChild(this.heartsC);
     this.drawHearts();
 
     // desktop keys: arrows match gem positions, or 1-4
@@ -93,8 +100,12 @@ export class SimonScene extends MinigameScene {
   drawHearts() {
     this.heartsC.removeChildren().forEach((c) => c.destroy());
     for (let i = 0; i < 3; i++) {
-      const h = makeIcon('heart', 26, i < this.lives ? 0xff5f9e : 0xd8c8d0);
-      h.x = (i - 1) * 34;
+      const alive = i < this.lives;
+      const h = new PIXI.Graphics();
+      h.beginFill(0xffffff, alive ? 1 : 0.35); drawHeart(h, 0, 0, 12); h.endFill();
+      h.beginFill(alive ? 0xe8263f : 0x5a1f3c); drawHeart(h, 0, 0, 9.5); h.endFill();
+      if (alive) { h.beginFill(0xffffff, 0.7); h.drawCircle(-3.5, -3.5, 2.4); h.endFill(); }
+      h.x = (i - 1) * 28;
       this.heartsC.addChild(h);
     }
   }

@@ -20,8 +20,8 @@ export class RhythmScene extends MinigameScene {
     this.id = 'rhythm';
     this.title = 'Runway Rhythm';
     this.icon = 'note';
-    this.howTo = 'Tap each lane\'s button exactly when a charm lands on the glowing bar. Perfect taps build a shiny combo!';
-    this.duration = 45000;
+    this.howTo = 'Hit each lane\'s button exactly when a charm lands on the glowing bar. On a keyboard press 1, 2, 3 (or ← ↓ →, or D F J). The beat gets FASTER every few seconds — keep up to build your combo!';
+    this.duration = 50000;
     this.coinRate = 0.26;
     this.bgTop = 0x3a2a5e;
     this.bgBot = 0x8a4a8e;
@@ -82,7 +82,7 @@ export class RhythmScene extends MinigameScene {
       fill: 0xffe08a, stroke: 0x5a1f3c, strokeThickness: 5,
     });
     this.comboText.anchor.set(0.5);
-    this.comboText.position.set(W / 2, 92);
+    this.comboText.position.set(W / 2, 104);
     this.playLayer.addChild(this.comboText);
 
     // desktop keys: arrows or D/F/J or 1/2/3
@@ -91,7 +91,33 @@ export class RhythmScene extends MinigameScene {
       d: () => this.tapLane(0), f: () => this.tapLane(1), j: () => this.tapLane(2),
       1: () => this.tapLane(0), 2: () => this.tapLane(1), 3: () => this.tapLane(2),
     });
-    const keyHint = new PIXI.Text('⌨ arrows or D · F · J', {
+    // show the keys right on the pads (desktop only — touch players just tap)
+    const hasKeys = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (hasKeys) {
+      this.pads.forEach((pad, i) => {
+        const kb = new PIXI.Graphics();
+        kb.beginFill(0x2a1a44, 0.92);
+        kb.drawRoundedRect(-13, -13, 26, 26, 7);
+        kb.endFill();
+        kb.lineStyle({ width: 2, color: 0xffffff, alpha: 0.9 });
+        kb.drawRoundedRect(-13, -13, 26, 26, 7);
+        kb.lineStyle(0);
+        kb.position.set(30, -34);
+        pad.addChild(kb);
+        const kt = new PIXI.Text(String(i + 1), { fontFamily: 'GameFont', fontSize: 16, fontWeight: '900', fill: 0xffffff });
+        kt.anchor.set(0.5);
+        kt.position.set(30, -34);
+        pad.addChild(kt);
+      });
+    }
+    this.speedLevel = 1;
+    this.speedText = new PIXI.Text('Speed 1', {
+      fontFamily: 'GameFont', fontSize: 15, fontWeight: '900', fill: 0xffffff, stroke: 0x5a1f3c, strokeThickness: 4,
+    });
+    this.speedText.anchor.set(0.5);
+    this.speedText.position.set(W / 2, 74);
+    this.playLayer.addChild(this.speedText);
+    const keyHint = new PIXI.Text(hasKeys ? 'keys: 1 · 2 · 3   or   ← ↓ →   or   D · F · J' : 'tap the buttons on the beat', {
       fontFamily: 'GameFont', fontSize: 13, fontWeight: '700', fill: 0xffffff, stroke: 0x5a1f3c, strokeThickness: 3,
     });
     keyHint.anchor.set(0.5);
@@ -114,7 +140,7 @@ export class RhythmScene extends MinigameScene {
     c.addChild(ic);
     c.position.set(this.laneX[lane], 60);
     this.playLayer.addChild(c);
-    this.notes.push({ c, lane, t: 0, judged: false });
+    this.notes.push({ c, lane, t: 0, judged: false, travel: this.travelMs });
   }
 
   tapLane(i) {
@@ -163,17 +189,27 @@ export class RhythmScene extends MinigameScene {
 
   tick(ms) {
     this.spawnT -= ms;
-    const speedUp = (45000 - this.timeLeft) / 45000; // 0..1
+    // The show speeds up in clear steps: a new speed level every 7 seconds.
+    const elapsed = this.duration - this.timeLeft;
+    const lvl = Math.min(7, 1 + Math.floor(elapsed / 7000));
+    if (lvl !== this.speedLevel) {
+      this.speedLevel = lvl;
+      this.speedText.text = 'Speed ' + lvl;
+      Sfx.go();
+      floatText(this.W / 2, this.H * 0.4, lvl >= 7 ? 'MAX SPEED!' : 'Speed up!', { size: 34, fill: 0xffe08a, stroke: 0x5a1f3c, dur: 1000 });
+      tween(this.speedText.scale, { x: 1.5, y: 1.5 }, 160, { onDone: () => tween(this.speedText.scale, { x: 1, y: 1 }, 260) });
+    }
+    const u = (lvl - 1) / 6; // 0..1
+    this.travelMs = 1900 - u * 1000;          // charms fall almost twice as fast by the end
     if (this.spawnT <= 0) {
       this.spawn();
-      this.spawnT = (900 - speedUp * 430) * rand(0.8, 1.25);
+      this.spawnT = (920 - u * 560) * rand(0.8, 1.2); // and arrive more than twice as often
     }
-    this.travelMs = 1800 - speedUp * 500;
     for (let i = this.notes.length - 1; i >= 0; i--) {
       const n = this.notes[i];
       if (n.c.destroyed) { this.notes.splice(i, 1); continue; }
       n.t += ms;
-      n.c.y = 60 + (this.hitY - 60) * (n.t / this.travelMs);
+      n.c.y = 60 + (this.hitY - 60) * (n.t / n.travel);
       if (!n.judged && n.c.y > this.hitY + 70) {
         n.judged = true;
         this.combo = 0;
@@ -182,7 +218,7 @@ export class RhythmScene extends MinigameScene {
         floatText(n.c.x, this.hitY, 'miss', { size: 20, fill: 0xffb0b0, stroke: 0x5a1f3c });
         tween(n.c, { alpha: 0 }, 200, { onDone: () => !n.c.destroyed && n.c.destroy() });
       }
-      if (n.t > this.travelMs + 600) {
+      if (n.t > n.travel + 600) {
         if (!n.c.destroyed) n.c.destroy();
         this.notes.splice(i, 1);
       }

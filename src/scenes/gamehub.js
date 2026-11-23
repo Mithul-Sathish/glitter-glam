@@ -13,7 +13,7 @@ export const GAME_LIST = [
   { id: 'bubble', name: 'Bubble Pop', icon: 'bubble', color: 0x5ba8ec, desc: 'Pop the sparkles!', mod: () => import('./games/bubblepop.js').then((m) => m.BubblePopScene) },
   { id: 'rhythm', name: 'Runway Rhythm', icon: 'note', color: 0xa66ae0, desc: 'Tap to the beat!', mod: () => import('./games/rhythm.js').then((m) => m.RhythmScene) },
   { id: 'stylematch', name: 'Style Rush', icon: 'eye', color: 0x46c791, desc: 'Spot the style!', mod: () => import('./games/stylematch.js').then((m) => m.StyleMatchScene) },
-  { id: 'simon', name: 'Sparkle Simon', icon: 'simon', color: 0xe0596d, desc: 'Repeat the gems!', mod: () => import('./games/simon.js').then((m) => m.SimonScene) },
+  { id: 'simon', name: 'Encore', icon: 'simon', color: 0xe0596d, desc: 'Repeat the gems!', mod: () => import('./games/simon.js').then((m) => m.SimonScene) },
 ];
 
 export class GameHubScene {
@@ -28,14 +28,16 @@ export class GameHubScene {
       fill: ['#ffffff', '#ffd9ec'],
     });
     title.anchor.set(0.5);
-    title.position.set(W / 2, 88);
+    const short = H < 520; // sideways phones: tuck the title beside the HUD
+    title.position.set(W / 2, short ? 36 : 88);
+    if (short) title.scale.set(0.72);
     r.addChild(title);
     const sub = new PIXI.Text('earn coins • unlock fashion', textStyle(17, 0xfff3fa, 0xb87ad0, 3));
     sub.anchor.set(0.5);
     sub.position.set(W / 2, 122);
-    r.addChild(sub);
+    if (!short) r.addChild(sub);
 
-    if (save.boostLeft > 0) {
+    if (save.boostLeft > 0 && !short) {
       const boost = new PIXI.Text(`✨ Your next ${save.boostLeft === 1 ? 'game pays' : save.boostLeft + ' games pay'} DOUBLE coins! ✨`, textStyle(16, 0xffe08a, 0xc2447c, 4));
       boost.anchor.set(0.5);
       boost.position.set(W / 2, 148);
@@ -45,8 +47,8 @@ export class GameHubScene {
     }
 
     // grid of cards
-    const areaTop = 150;
-    const areaH = H - areaTop - 70;
+    const areaTop = short ? 66 : 150;
+    const areaH = H - areaTop - (short ? 8 : 70);
     const portrait = H > W * 0.9;
     const cols = portrait ? 2 : 3;
     const rows = Math.ceil(GAME_LIST.length / cols);

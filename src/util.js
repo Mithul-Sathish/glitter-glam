@@ -66,3 +66,24 @@ export const lighten = (c, t = 0.35) => mixColor(c, 0xffffff, t);
 export function fmt(n) {
   return n.toLocaleString('en-US');
 }
+
+/** Rough colour family of a 0xRRGGBB colour: pink, red, orange, yellow, green, blue, purple, white, black, brown. */
+export function colorFamily(c) {
+  const r = ((c >> 16) & 255) / 255, g = ((c >> 8) & 255) / 255, b = (c & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2, d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (s < 0.16 || d < 0.08) return l > 0.75 ? 'white' : l < 0.3 ? 'black' : 'grey';
+  let h;
+  if (max === r) h = ((g - b) / d) % 6;
+  else if (max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  h = (h * 60 + 360) % 360;
+  if (h < 14 || h >= 345) return l > 0.62 ? 'pink' : 'red';
+  if (h < 40) return l < 0.42 ? 'brown' : 'orange';
+  if (h < 68) return 'yellow';
+  if (h < 165) return 'green';
+  if (h < 255) return 'blue';
+  if (h < 292) return 'purple';
+  return 'pink';
+}
