@@ -11,7 +11,58 @@ export const CATS = [
   { id: 'special', name: 'Magic', icon: 'wand' },
 ];
 
-export const SKINS = [0xffdfc9, 0xf7cdae, 0xeab687, 0xc98d5e, 0x9c6a3f, 0x74492a];
+// The first six tones keep their old indices so existing saves still match.
+export const SKINS = [0xffdfc9, 0xf7cdae, 0xeab687, 0xc98d5e, 0x9c6a3f, 0x74492a, 0xfbe8dc, 0xdba06e, 0x5a3620, 0x3f2616];
+
+/** Hair dyes. Index 0 keeps the hairstyle's own colour. */
+export const DYES = [
+  { name: 'Natural', hex: null },
+  { name: 'Chestnut', hex: 0x5b3a29 },
+  { name: 'Midnight', hex: 0x2b2233 },
+  { name: 'Honey Blonde', hex: 0xe9b64c },
+  { name: 'Cherry', hex: 0xc23a50 },
+  { name: 'Ginger', hex: 0xd9692e },
+  { name: 'Hot Pink', hex: 0xff8fc7 },
+  { name: 'Violet', hex: 0x9a6ee0 },
+  { name: 'Ocean', hex: 0x4fa8e8 },
+  { name: 'Mint', hex: 0x5fd3ae },
+  { name: 'Silver', hex: 0xb9bccb },
+  { name: 'Ice Blonde', hex: 0xf0ecf7 },
+  { name: 'Caramel', hex: 0xa9713f },
+];
+
+export const EYE_COLORS = [
+  { name: 'Hazel', hex: 0x6b4632 },
+  { name: 'Ocean', hex: 0x3a6ea8 },
+  { name: 'Forest', hex: 0x3f8a4f },
+  { name: 'Violet', hex: 0x8a5fc0 },
+  { name: 'Rose', hex: 0xc0526b },
+  { name: 'Teal', hex: 0x37a8a0 },
+  { name: 'Amber', hex: 0xd9912a },
+  { name: 'Storm Grey', hex: 0x7c8794 },
+  { name: 'Onyx', hex: 0x2a2028 },
+  { name: 'Sky', hex: 0x6cc4ee },
+];
+
+/** Face and feature options, drawn in character.js. Saved as indices in save.look. */
+export const FEATURES = [
+  { key: 'eyeShape', name: 'Eye shape', opts: ['Round', 'Almond', 'Cat-eye', 'Sleepy', 'Sparkle'] },
+  { key: 'lashes', name: 'Lashes', opts: ['Classic', 'Long', 'Bare'] },
+  { key: 'brows', name: 'Brows', opts: ['Soft', 'Arched', 'Straight', 'Bold'] },
+  { key: 'mouth', name: 'Smile', opts: ['Sweet', 'Big grin', 'Smirk', 'Pout', 'Cat'] },
+  { key: 'lips', name: 'Lip colour', opts: ['Berry', 'Rose', 'Coral', 'Red', 'Plum', 'Nude'] },
+  { key: 'blush', name: 'Blush', opts: ['Pink', 'Peach', 'Rosy', 'None'] },
+  { key: 'marks', name: 'Details', opts: ['None', 'Freckles', 'Beauty mark', 'Dimples', 'Heart', 'Star'] },
+];
+export const LIP_COLORS = [0xc2447c, 0xe26a8d, 0xf0785a, 0xd1274b, 0x8a3a6e, 0xb9776a];
+
+/** A random set of face features (rivals on the runway, and the Shuffle button). */
+export function randomLook() {
+  const look = { hairDye: 0, eyeColor: Math.floor(Math.random() * EYE_COLORS.length) };
+  for (const f of FEATURES) look[f.key] = Math.floor(Math.random() * f.opts.length);
+  if (Math.random() < 0.5) look.marks = 0;
+  return look;
+}
 
 export const ITEMS = [
   // ------ HAIR (style, c1 main, c2 shine) ------
@@ -101,17 +152,55 @@ export const ITEMS = [
   { id: 'sp_hearts', cat: 'special', name: 'Heart Halo', price: 620, lvl: 4, rar: 3, p: { style: 'aura', c1: 0xff6f91, shape: 'heart' } },
   { id: 'sp_snow', cat: 'special', name: 'Snow Shimmer', price: 1100, lvl: 6, rar: 4, p: { style: 'aura', c1: 0xbfe8f7, shape: 'flake' } },
   { id: 'sp_starring', cat: 'special', name: 'Ring of Stars', price: 2200, lvl: 8, rar: 5, p: { style: 'orbit', c1: 0xffd35c } },
+
+  // ============================ MYTHIC TIER (rar 6) ============================
+  // Coins alone can't buy these. Each carries `req`: trials checked in
+  // mythic.js (shows won, high scores, streaks, collections).
+  { id: 'hair_starfall', cat: 'hair', name: 'Starfall Cascade', price: 9000, lvl: 11, rar: 6,
+    req: [{ k: 'plays', n: 60 }, { k: 'ownCat', cat: 'hair', n: 10 }],
+    p: { style: 'starfall', c1: 0x2a1152, c2: 0x7a5ad0, tips: 0x9bd7f5 } },
+  { id: 'dress_zodiac', cat: 'dress', name: 'Zodiac Empress Gown', price: 12000, lvl: 12, rar: 6,
+    req: [{ k: 'shows', n: 25 }, { k: 'bestShow', n: 9 }],
+    p: { style: 'ball', c1: 0x141234, c2: 0x6f6fc4, deco: 'zodiac' } },
+  { id: 'dress_dragonheart', cat: 'dress', name: 'Dragonheart Gown', price: 16000, lvl: 13, rar: 6,
+    req: [{ k: 'best', game: 'simon', n: 900 }, { k: 'best', game: 'rhythm', n: 1500 }],
+    p: { style: 'mermaid', c1: 0x7b1230, c2: 0xff9a3c, deco: 'dragonscale' } },
+  { id: 'dress_eternal_sakura', cat: 'dress', name: 'Eternal Sakura Gown', price: 20000, lvl: 14, rar: 6,
+    req: [{ k: 'streak', n: 14 }, { k: 'challenges', n: 20 }],
+    p: { style: 'highlow', c1: 0xe3a3b6, c2: 0xfaf0f4, deco: 'sakura' } },
+  { id: 'dress_prism', cat: 'dress', name: 'Infinity Prism Gown', price: 60000, lvl: 20, rar: 6,
+    req: [{ k: 'mythics', n: 6 }, { k: 'wins', n: 100 }, { k: 'earned', n: 80000 }],
+    p: { style: 'ball', c1: 0xf4f7ff, c2: 0xc0a8ff, deco: 'prism' } },
+  { id: 'hat_diadem', cat: 'hat', name: 'Empress Diadem', price: 14000, lvl: 12, rar: 6,
+    req: [{ k: 'winStreak', n: 5 }, { k: 'ownCat', cat: 'hat', n: 7 }],
+    p: { style: 'diadem', c1: 0xffd35c, c2: 0xff5f9e } },
+  { id: 'shoes_crystal', cat: 'shoes', name: 'Aurora Crystal Heels', price: 10000, lvl: 11, rar: 6,
+    req: [{ k: 'best', game: 'starcatch', n: 1200 }, { k: 'ownCat', cat: 'shoes', n: 8 }],
+    p: { style: 'crystal', c1: 0xbfe8f7, c2: 0xc39aec, glass: true } },
+  { id: 'neck_kingdom', cat: 'neck', name: 'Heart of the Kingdom', price: 18000, lvl: 13, rar: 6,
+    req: [{ k: 'wins', n: 50 }, { k: 'earned', n: 30000 }],
+    p: { style: 'royalgem', c1: 0xff3d6e, c2: 0xffd35c } },
+  { id: 'bag_comet', cat: 'bag', name: 'Comet Clutch', price: 10000, lvl: 11, rar: 6,
+    req: [{ k: 'best', game: 'bubble', n: 1000 }, { k: 'ownCat', cat: 'bag', n: 6 }],
+    p: { style: 'comet', c1: 0x3a2358, c2: 0xffe08a } },
+  { id: 'sp_wings_phoenix', cat: 'special', name: 'Phoenix Wings', price: 22000, lvl: 15, rar: 6,
+    req: [{ k: 'winStreak', n: 8 }, { k: 'own', id: 'sp_wings_gold' }],
+    p: { style: 'wings', c1: 0xff7a1a, c2: 0xffe08a, phoenix: true } },
+  { id: 'sp_orbit', cat: 'special', name: 'Cosmic Orbit', price: 30000, lvl: 16, rar: 6,
+    req: [{ k: 'allBest', n: 500 }, { k: 'earned', n: 45000 }],
+    p: { style: 'planet', c1: 0x9bd7f5, c2: 0xff8fc7 } },
 ];
 
 export const byId = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
 export const byCat = (cat) => ITEMS.filter((i) => i.cat === cat);
+export const isMythic = (item) => !!(item && item.req);
 
 /** Style score of an equipped set — the fashion-show judging currency. */
 export function styleScore(eq) {
   let s = 20; // base charm
   for (const cat of Object.keys(eq)) {
     const it = eq[cat] && byId[eq[cat]];
-    if (it) s += it.rar * 14 + Math.round(it.price / 40);
+    if (it) s += it.rar * 14 + Math.round(Math.min(it.price, 3600) / 40);
   }
   return s;
 }
@@ -120,12 +209,12 @@ export function styleScore(eq) {
 export function randomOutfit(maxLvl) {
   const eq = { hair: null, dress: null, shoes: null, hat: null, neck: null, bag: null, special: null };
   for (const cat of ['hair', 'dress', 'shoes']) {
-    const pool = byCat(cat).filter((i) => i.lvl <= maxLvl + 1);
+    const pool = byCat(cat).filter((i) => i.lvl <= maxLvl + 1 && !isMythic(i));
     eq[cat] = pool[Math.floor(Math.random() * pool.length)].id;
   }
   for (const cat of ['hat', 'neck', 'bag', 'special']) {
     if (Math.random() < 0.55) {
-      const pool = byCat(cat).filter((i) => i.lvl <= maxLvl + 1);
+      const pool = byCat(cat).filter((i) => i.lvl <= maxLvl + 1 && !isMythic(i));
       if (pool.length) eq[cat] = pool[Math.floor(Math.random() * pool.length)].id;
     }
   }

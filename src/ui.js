@@ -4,7 +4,7 @@ import { G } from './game.js';
 import { tween, Ease, killTweensOf } from './tween.js';
 import { Sfx } from './sound.js';
 import { sparkleBurst } from './effects.js';
-import { save, level, levelProgress } from './save.js';
+import { save, level, levelProgress, rankFor } from './save.js';
 import { isNight, nite } from './theme.js';
 import { drawHeart, drawSparkle, starPoints, lighten, darken, fmt, rand, drawDiamond } from './util.js';
 
@@ -152,6 +152,11 @@ export function iconButton(kind, size = 56, color = PALETTE.pink, onTap = null) 
       i.lineTo(Math.cos(a) * s * 1.3, Math.sin(a) * s * 1.3);
     }
     i.lineStyle(0);
+  } else {
+    // any makeIcon kind, drawn white
+    i.lineStyle(0);
+    const mi = makeIcon(kind, size * 0.56, 0xffffff);
+    c.addChild(mi);
   }
   c.addChild(i);
   c.eventMode = 'static';
@@ -266,7 +271,7 @@ export function makeIcon(kind, size = 32, color) {
       g.beginFill(0xffffff, 0.6); g.drawCircle(0, s * 0.1, s * 0.18); g.endFill();
       break;
     case 'wand':
-      g.lineStyle({ width: 4, color: 0xffffff });
+      g.lineStyle({ width: 4, color: color === 0xffffff ? 0xffffff : 0xb48ad6, cap: PIXI.LINE_CAP.ROUND });
       g.moveTo(-s * 0.7, s * 0.9); g.lineTo(s * 0.25, -s * 0.25);
       g.lineStyle(0);
       g.beginFill(color || 0xffd35c);
@@ -327,6 +332,84 @@ export function makeIcon(kind, size = 32, color) {
       g.endFill();
       g.beginFill(0x5b3a29); g.drawEllipse(0, 0, s * 0.12, s * 0.5); g.endFill();
       break;
+    case 'flame':
+      g.beginFill(color || 0xff7a2a);
+      g.moveTo(0, -s);
+      g.bezierCurveTo(s * 0.9, -s * 0.2, s * 0.85, s * 0.9, 0, s);
+      g.bezierCurveTo(-s * 0.85, s * 0.9, -s * 0.75, s * 0.1, -s * 0.3, -s * 0.25);
+      g.bezierCurveTo(-s * 0.2, -s * 0.05, 0, -s * 0.3, 0, -s);
+      g.endFill();
+      if (!color) {
+        g.beginFill(0xffd35c);
+        g.moveTo(0, -s * 0.15);
+        g.bezierCurveTo(s * 0.45, s * 0.3, s * 0.4, s * 0.85, 0, s * 0.85);
+        g.bezierCurveTo(-s * 0.4, s * 0.85, -s * 0.4, s * 0.35, 0, -s * 0.15);
+        g.endFill();
+      }
+      break;
+    case 'check':
+      g.beginFill(color || 0x46c791); g.drawCircle(0, 0, s); g.endFill();
+      g.lineStyle({ width: Math.max(2.5, s * 0.28), color: color ? 0x46c791 : 0xffffff, cap: PIXI.LINE_CAP.ROUND, join: PIXI.LINE_JOIN.ROUND });
+      g.moveTo(-s * 0.45, 0); g.lineTo(-s * 0.1, s * 0.38); g.lineTo(s * 0.5, -s * 0.35);
+      g.lineStyle(0);
+      break;
+    case 'gift':
+      g.beginFill(color || 0xe0596d); g.drawRoundedRect(-s * 0.8, -s * 0.3, s * 1.6, s * 1.2, s * 0.18); g.endFill();
+      g.beginFill(color ? 0xffffff : 0xffd35c, color ? 0.5 : 1);
+      g.drawRect(-s * 0.16, -s * 0.3, s * 0.32, s * 1.2);
+      g.drawRoundedRect(-s * 0.95, -s * 0.6, s * 1.9, s * 0.42, s * 0.14);
+      g.endFill();
+      g.beginFill(color || 0xe0596d);
+      g.drawEllipse(-s * 0.3, -s * 0.78, s * 0.3, s * 0.2);
+      g.drawEllipse(s * 0.3, -s * 0.78, s * 0.3, s * 0.2);
+      g.endFill();
+      break;
+    case 'camera':
+      g.beginFill(color || 0xa66ae0);
+      g.drawRoundedRect(-s, -s * 0.55, s * 2, s * 1.4, s * 0.28);
+      g.drawRoundedRect(-s * 0.45, -s * 0.9, s * 0.9, s * 0.5, s * 0.14);
+      g.endFill();
+      g.beginFill(color ? 0x000000 : 0xffffff, color ? 0.28 : 0.95); g.drawCircle(0, s * 0.15, s * 0.5); g.endFill();
+      g.beginFill(color || 0xa66ae0); g.drawCircle(0, s * 0.15, s * 0.28); g.endFill();
+      break;
+    case 'dice':
+      g.beginFill(color || 0xff5f9e); g.drawRoundedRect(-s * 0.85, -s * 0.85, s * 1.7, s * 1.7, s * 0.35); g.endFill();
+      g.beginFill(color ? 0x000000 : 0xffffff, color ? 0.3 : 1);
+      for (const [dx, dy] of [[-0.42, -0.42], [0.42, 0.42], [0, 0], [-0.42, 0.42], [0.42, -0.42]]) g.drawCircle(dx * s, dy * s, s * 0.15);
+      g.endFill();
+      break;
+    case 'face':
+      g.beginFill(color || 0xf7cdae); g.drawCircle(0, 0, s); g.endFill();
+      g.beginFill(color ? 0x000000 : 0x6b4632, color ? 0.35 : 1);
+      g.drawEllipse(-s * 0.36, -s * 0.08, s * 0.14, s * 0.2);
+      g.drawEllipse(s * 0.36, -s * 0.08, s * 0.14, s * 0.2);
+      g.endFill();
+      g.lineStyle({ width: Math.max(2, s * 0.16), color: color ? 0x000000 : 0xc2447c, alpha: color ? 0.35 : 1, cap: PIXI.LINE_CAP.ROUND });
+      g.moveTo(-s * 0.3, s * 0.38); g.quadraticCurveTo(0, s * 0.62, s * 0.3, s * 0.38);
+      g.lineStyle(0);
+      break;
+    case 'medal':
+      g.beginFill(0xe0596d); g.drawPolygon([-s * 0.5, -s, -s * 0.05, -s, s * 0.15, -s * 0.2, -s * 0.3, -s * 0.2]); g.endFill();
+      g.beginFill(0x5ba8ec); g.drawPolygon([s * 0.5, -s, s * 0.05, -s, -s * 0.15, -s * 0.2, s * 0.3, -s * 0.2]); g.endFill();
+      g.beginFill(color || 0xf5a91a); g.drawCircle(0, s * 0.3, s * 0.68); g.endFill();
+      g.beginFill(0xffffff, 0.75); g.drawPolygon(starPoints(0, s * 0.3, 5, s * 0.4, s * 0.18)); g.endFill();
+      break;
+    case 'mythic':
+      g.beginFill(color || 0xc39aec); g.drawPolygon(starPoints(0, 0, 4, s, s * 0.34)); g.endFill();
+      g.beginFill(0xffffff, 0.85); g.drawPolygon(starPoints(0, 0, 4, s * 0.48, s * 0.16)); g.endFill();
+      break;
+    case 'calendar':
+      g.beginFill(color || 0xff5f9e); g.drawRoundedRect(-s * 0.9, -s * 0.8, s * 1.8, s * 1.7, s * 0.25); g.endFill();
+      g.beginFill(color ? 0x000000 : 0xffffff, color ? 0.25 : 1); g.drawRoundedRect(-s * 0.68, -s * 0.3, s * 1.36, s * 1, s * 0.12); g.endFill();
+      g.beginFill(color || 0xff5f9e); drawHeart(g, 0, s * 0.2, s * 0.3); g.endFill();
+      break;
+    case 'save':
+      g.beginFill(color || 0x5ba8ec); g.drawRoundedRect(-s * 0.85, -s * 0.85, s * 1.7, s * 1.7, s * 0.22); g.endFill();
+      g.beginFill(color ? 0x000000 : 0xffffff, color ? 0.28 : 1);
+      g.drawRect(-s * 0.45, -s * 0.85, s * 0.9, s * 0.55);
+      g.drawRoundedRect(-s * 0.55, s * 0.05, s * 1.1, s * 0.8, s * 0.1);
+      g.endFill();
+      break;
     case 'sparkle':
       g.beginFill(color || 0xffffff); drawSparkle(g, 0, 0, s); g.endFill();
       break;
@@ -383,9 +466,12 @@ export function makeHUD(W) {
   const starIc = makeIcon('star', 32);
   starIc.position.set(24, 23);
   lp.addChild(starIc);
-  const lvText = new PIXI.Text('Lv ' + level(), textStyle(20, 0xffffff, 0x5a1f3c, 3));
+  const lvLabel = () => `Lv ${level()} · ${rankFor().name}`;
+  const lvText = new PIXI.Text(lvLabel(), textStyle(14, 0xffffff, 0x5a1f3c, 3));
   lvText.anchor.set(0, 0.5);
   lvText.position.set(44, 15);
+  const fitLv = () => { lvText.scale.set(1); if (lvText.width > 114) lvText.scale.set(114 / lvText.width); };
+  fitLv();
   lp.addChild(lvText);
   // progress bar
   const barBg = new PIXI.Graphics();
@@ -406,7 +492,8 @@ export function makeHUD(W) {
   c.coinTarget = () => ({ x: pill.x + 26, y: pill.y + 23 });
   c.refresh = () => {
     amount.text = fmt(save.coins);
-    lvText.text = 'Lv ' + level();
+    lvText.text = lvLabel();
+    fitLv();
     bar.scale.x = Math.max(0.04, levelProgress());
   };
   c.bumpCoin = () => {
@@ -459,7 +546,7 @@ function mixHex(c1, c2, t) {
 export function rarityStars(n, size = 14) {
   const c = new PIXI.Container();
   for (let i = 0; i < n; i++) {
-    const s = makeIcon('star', size);
+    const s = n >= 6 ? makeIcon('mythic', size + 2) : makeIcon('star', size);
     s.x = i * (size + 2);
     c.addChild(s);
   }

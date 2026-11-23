@@ -9,6 +9,7 @@ import { sparkleBurst, coinFly, confetti, floatText } from '../effects.js';
 import { tween, Ease, delay } from '../tween.js';
 import { Sfx } from '../sound.js';
 import { fmt } from '../util.js';
+import { submitScore } from '../online.js';
 
 export class MinigameScene {
   // subclasses set: id, title, icon, howTo, duration (ms, 0 = untimed), coinRate
@@ -48,6 +49,8 @@ export class MinigameScene {
     this.timerText.anchor.set(0.5);
     this.timerText.position.set(px + pw2 * 0.28, 34);
     head.addChild(this.timerText);
+    this.head = head;
+    this.headerSlot = { x: px + pw2 * 0.28, y: 34 };
     r.addChild(head);
 
     const back = iconButton('close', 48, PALETTE.pink, async () => {
@@ -71,31 +74,32 @@ export class MinigameScene {
     dim.eventMode = 'static';
     ov.addChild(dim);
     const pw = Math.min(400, W - 30);
-    const panel = makePanel(pw, 330, { border: PALETTE.pink });
+    const panel = makePanel(pw, 360, { border: PALETTE.pink });
     panel.position.set(W / 2, H / 2);
     ov.addChild(panel);
     const icon = makeIcon(this.icon, 64);
-    icon.position.set(W / 2, H / 2 - 118);
+    icon.position.set(W / 2, H / 2 - 134);
     ov.addChild(icon);
     const t = new PIXI.Text(this.title, textStyle(30, PALETTE.pink, 0xffffff, 0));
     t.anchor.set(0.5);
-    t.position.set(W / 2, H / 2 - 66);
+    t.position.set(W / 2, H / 2 - 84);
     ov.addChild(t);
     const how = new PIXI.Text(this.howTo, {
-      ...textStyle(18, PALETTE.text, 0xffffff, 0),
+      ...textStyle(16, PALETTE.text, 0xffffff, 0),
       fontWeight: '600',
       wordWrap: true,
-      wordWrapWidth: pw - 60,
-      lineHeight: 26,
+      wordWrapWidth: pw - 50,
+      lineHeight: 22,
     });
     how.anchor.set(0.5);
-    how.position.set(W / 2, H / 2 + 8);
+    how.position.set(W / 2, H / 2 + 4);
+    if (how.height > 150) how.scale.set(150 / how.height);
     ov.addChild(how);
     const best = save.best[this.id];
     if (best) {
       const bt = new PIXI.Text('Best: ' + fmt(best), textStyle(17, PALETTE.purple, 0xffffff, 0));
       bt.anchor.set(0.5);
-      bt.position.set(W / 2, H / 2 + 72);
+      bt.position.set(W / 2, H / 2 + 92);
       ov.addChild(bt);
     }
     const go = makeButton("Let's go!", {
@@ -104,13 +108,28 @@ export class MinigameScene {
         tween(ov, { alpha: 0 }, 200, { onDone: () => { ov.destroy({ children: true }); this.countdown(); } });
       },
     });
-    go.position.set(W / 2, H / 2 + 128);
+    go.position.set(W / 2, H / 2 + 140);
     ov.addChild(go);
     ov.alpha = 0;
     tween(ov, { alpha: 1 }, 250);
     panel.scale.set(0.7);
     tween(panel.scale, { x: 1, y: 1 }, 380, { ease: Ease.backOut });
+    this.fitOverlay(ov, 376);
     this.root.addChild(ov);
+  }
+
+  /** Shrink a centred overlay so its panel fits short screens (landscape phones). */
+  fitOverlay(ov, panelH) {
+    const { W, H } = this;
+    const k = Math.min(1, (H - 8) / panelH);
+    if (k >= 1) return;
+    ov.pivot.set(W / 2, H / 2);
+    ov.position.set(W / 2, H / 2);
+    ov.scale.set(k);
+    // the dim layer must still cover the whole screen
+    const dim = ov.children[0];
+    dim.scale.set(1 / k);
+    dim.position.set(W / 2 - W / 2 / k, H / 2 - H / 2 / k);
   }
 
   countdown() {
@@ -193,8 +212,10 @@ export class MinigameScene {
     const boosted = useBoost();
     if (boosted) coins *= 2;
     const isRecord = recordScore(this.id, this.score);
+    submitScore(this.id, this.score);
     const before = level();
-    const { leveledUp } = earnCoins(coins);
+    const { leveledUp, levels } = earnCoins(coins);
+    const lvBonus = levels.reduce((a, l) => a + l.reward, 0);
     if (leveledUp || isRecord) happytime();
 
     const ov = new PIXI.Container();
@@ -239,7 +260,7 @@ export class MinigameScene {
     const subY = boosted ? 36 : 26;
 
     if (leveledUp) {
-      const lv = new PIXI.Text(`✨ LEVEL UP! You're Lv ${level()} ✨`, textStyle(20, 0xffffff, PALETTE.purple, 4));
+      const lv = new PIXI.Text(`LEVEL UP! Lv ${level()}  +${fmt(lvBonus)} bonus coins`, textStyle(18, 0xffffff, PALETTE.purple, 4));
       lv.anchor.set(0.5);
       lv.position.set(W / 2, H / 2 + subY);
       ov.addChild(lv);
@@ -282,6 +303,7 @@ export class MinigameScene {
     tween(ov, { alpha: 1 }, 300);
     panel.scale.set(0.7);
     tween(panel.scale, { x: 1, y: 1 }, 400, { ease: Ease.backOut });
+    this.fitOverlay(ov, 376);
     this.root.addChild(ov);
     if (isRecord) { confetti(W, 50); Sfx.fanfare(); } else Sfx.good();
 

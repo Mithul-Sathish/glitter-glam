@@ -2,8 +2,12 @@
 // Coordinate space: feet at (0,0), roughly 300 wide and 500 tall (negative y up).
 // createCharacter() returns a Container with an .update(ms) idle animator.
 
-import { byId, SKINS } from './items.js';
-import { rand, starPoints, drawHeart, drawSparkle, darken, lighten, drawDiamond } from './util.js';
+import { byId, SKINS, DYES, EYE_COLORS, LIP_COLORS } from './items.js';
+import { save } from './save.js';
+import { rand, starPoints, drawHeart, drawSparkle, darken, lighten, drawDiamond, mixColor } from './util.js';
+
+/** Options that draw the player's own face, hair dye and eye colour. */
+export function playerOpts() { return { look: save.look }; }
 
 const HEAD_Y = -352;
 const HEAD_R = 86;
@@ -13,7 +17,13 @@ const HIP_Y = -158;
 export function createCharacter(eq, skinIdx = 0, opts = {}) {
   const root = new PIXI.Container();
   const skin = SKINS[skinIdx % SKINS.length];
-  const hair = eq.hair ? byId[eq.hair] : null;
+  const look = opts.look || {};
+  let hair = eq.hair ? byId[eq.hair] : null;
+  // hair dye recolours any hairstyle (Mythic hair keeps its own night-sky palette)
+  const dye = look.hairDye ? DYES[look.hairDye % DYES.length] : null;
+  if (hair && dye && dye.hex != null && hair.rar < 6) {
+    hair = { ...hair, p: { ...hair.p, c1: dye.hex, c2: lighten(dye.hex, 0.3), tips: undefined } };
+  }
   const dress = eq.dress ? byId[eq.dress] : null;
   const shoes = eq.shoes ? byId[eq.shoes] : null;
   const hat = eq.hat ? byId[eq.hat] : null;
@@ -29,16 +39,10 @@ export function createCharacter(eq, skinIdx = 0, opts = {}) {
     wings = drawWings(special.p);
     root.addChild(wings);
   }
-  if (special && special.p.style === 'aura') {
-    const aura = new PIXI.Container();
-    root.addChild(aura);
-    anim.aura = aura;
-    anim.auraColor = special.p.c1;
-    anim.auraShape = special.p.shape || 'sparkle';
-  }
 
   // Wearing any 5★ piece makes the whole look shimmer subtly.
   const maxRar = Math.max(0, ...Object.values(eq).filter(Boolean).map((id) => (byId[id] ? byId[id].rar : 0)));
+  anim.maxRar = maxRar;
   if (maxRar >= 5) {
     const lux = new PIXI.Container();
     root.addChild(lux);
@@ -116,48 +120,10 @@ export function createCharacter(eq, skinIdx = 0, opts = {}) {
   root.addChild(head);
 
   // ---------- face ----------
-  const face = new PIXI.Container();
-  const eyesOpen = new PIXI.Graphics();
-  const irisColor = opts.irisColor ?? 0x6b4632;
-  for (const s of [-1, 1]) {
-    const ex = s * 34, ey = HEAD_Y + 10;
-    eyesOpen.beginFill(0xffffff); eyesOpen.drawEllipse(ex, ey, 15, 19); eyesOpen.endFill();
-    eyesOpen.beginFill(irisColor); eyesOpen.drawEllipse(ex, ey + 3, 10.5, 14); eyesOpen.endFill();
-    eyesOpen.beginFill(0x2a1a12); eyesOpen.drawEllipse(ex, ey + 4, 6, 9); eyesOpen.endFill();
-    eyesOpen.beginFill(0xffffff); eyesOpen.drawCircle(ex - 4, ey - 3, 4.2); eyesOpen.drawCircle(ex + 5, ey + 8, 2.2); eyesOpen.endFill();
-    // lashes
-    eyesOpen.lineStyle({ width: 4, color: 0x3a2a22, cap: PIXI.LINE_CAP.ROUND });
-    eyesOpen.moveTo(ex - 15, ey - 13);
-    eyesOpen.quadraticCurveTo(ex, ey - 22, ex + 15, ey - 13);
-    eyesOpen.lineStyle(0);
-    // brow
-    eyesOpen.lineStyle({ width: 3.5, color: darken(irisColor, 0.2), cap: PIXI.LINE_CAP.ROUND });
-    eyesOpen.moveTo(ex - 13, ey - 30);
-    eyesOpen.quadraticCurveTo(ex, ey - 36, ex + 13, ey - 30);
-    eyesOpen.lineStyle(0);
-  }
-  const eyesClosed = new PIXI.Graphics();
-  for (const s of [-1, 1]) {
-    const ex = s * 34, ey = HEAD_Y + 12;
-    eyesClosed.lineStyle({ width: 4.5, color: 0x3a2a22, cap: PIXI.LINE_CAP.ROUND });
-    eyesClosed.moveTo(ex - 13, ey);
-    eyesClosed.quadraticCurveTo(ex, ey + 8, ex + 13, ey);
-  }
-  eyesClosed.visible = false;
-  const mouthEtc = new PIXI.Graphics();
-  // blush
-  mouthEtc.beginFill(0xff8aa8, 0.4);
-  mouthEtc.drawEllipse(-52, HEAD_Y + 34, 13, 8);
-  mouthEtc.drawEllipse(52, HEAD_Y + 34, 13, 8);
-  mouthEtc.endFill();
-  // smile
-  mouthEtc.lineStyle({ width: 4, color: 0xc2447c, cap: PIXI.LINE_CAP.ROUND });
-  mouthEtc.moveTo(-10, HEAD_Y + 46);
-  mouthEtc.quadraticCurveTo(0, HEAD_Y + 54, 10, HEAD_Y + 46);
-  face.addChild(eyesOpen, eyesClosed, mouthEtc);
+  const face = drawFace(look, skin, hair ? darken(hair.p.c1, 0.3) : 0x5b3a29);
   root.addChild(face);
-  anim.eyesOpen = eyesOpen;
-  anim.eyesClosed = eyesClosed;
+  anim.eyesOpen = face.eyesOpen;
+  anim.eyesClosed = face.eyesClosed;
 
   // ---------- front hair ----------
   if (hair) root.addChild(drawFrontHair(hair.p));
@@ -193,6 +159,18 @@ export function createCharacter(eq, skinIdx = 0, opts = {}) {
     root.addChild(bl);
   }
 
+  if (special && special.p.style === 'planet') {
+    const o = drawOrbit(special.p);
+    o.c.position.set(92, -318);
+    root.addChild(o.c);
+    anim.moons = o.moons;
+  }
+
+  // ---------- auras (Glitter Aura, Heart Halo, Snow Shimmer): drawn IN FRONT so they are easy to see ----------
+  if (special && special.p.style === 'aura') {
+    anim.auraParts = buildAura(root, special.p);
+  }
+
   anim.wings = wings;
 
   root.charUpdate = (ms) => {
@@ -211,26 +189,18 @@ export function createCharacter(eq, skinIdx = 0, opts = {}) {
     if (anim.wings) anim.wings.scale.x = 1 + Math.sin(anim.t / 260) * 0.06;
     // wand twinkle
     if (anim.wand) anim.wand.rotation = Math.sin(anim.t / 700) * 0.06;
-    // aura sparkles
-    if (anim.aura && Math.random() < 0.12) {
-      const g = new PIXI.Graphics();
-      g.beginFill(anim.auraColor, 0.9);
-      if (anim.auraShape === 'heart') drawHeart(g, 0, 0, rand(5, 9));
-      else if (anim.auraShape === 'flake') g.drawPolygon(starPoints(0, 0, 6, rand(5, 9), rand(2, 3)));
-      else drawSparkle(g, 0, 0, rand(4, 9));
-      g.endFill();
-      g.x = rand(-110, 110); g.y = rand(-470, -20);
-      anim.aura.addChild(g);
-      g.meta = { life: 900, t: 0 };
-    }
-    if (anim.aura) {
-      for (const g of [...anim.aura.children]) {
-        g.meta.t += ms;
-        g.alpha = 1 - g.meta.t / g.meta.life;
-        g.rotation += ms / 400;
-        g.y -= ms / 40;
-        if (g.meta.t >= g.meta.life) g.destroy();
-      }
+    // auras
+    if (anim.auraParts) updateAura(anim.auraParts, anim.t);
+    // Cosmic Orbit moons
+    if (anim.moons) {
+      anim.moons.forEach((m, i) => {
+        const o = m.meta;
+        const a2 = anim.t / 1000 * (0.9 + i * 0.25) + i * 2.1;
+        const lx = Math.cos(a2) * o.rx, ly = Math.sin(a2) * o.ry;
+        m.x = lx * Math.cos(o.rot) - ly * Math.sin(o.rot);
+        m.y = lx * Math.sin(o.rot) + ly * Math.cos(o.rot);
+        m.rotation = a2;
+      });
     }
     // luxury shimmer for 5★ looks
     if (anim.lux && Math.random() < 0.05) {
@@ -260,7 +230,242 @@ export function createCharacter(eq, skinIdx = 0, opts = {}) {
     }
   };
 
+  root.charUpdate(0); // place animated pieces so even a still photo shows them
   return root;
+}
+
+// ============================== face ==============================
+
+function drawFace(look, skin, browColor) {
+  const face = new PIXI.Container();
+  const iris = EYE_COLORS[(look.eyeColor || 0) % EYE_COLORS.length].hex;
+  const shape = look.eyeShape || 0;   // 0 round, 1 almond, 2 cat-eye, 3 sleepy, 4 sparkle
+  const lashes = look.lashes || 0;    // 0 classic, 1 long, 2 bare
+  const brows = look.brows || 0;      // 0 soft, 1 arched, 2 straight, 3 bold
+  const mouth = look.mouth || 0;      // 0 sweet, 1 grin, 2 smirk, 3 pout, 4 cat
+  const lip = LIP_COLORS[(look.lips || 0) % LIP_COLORS.length];
+  const blush = look.blush || 0;      // 0 pink, 1 peach, 2 rosy, 3 none
+  const marks = look.marks || 0;      // 0 none, 1 freckles, 2 beauty mark, 3 dimples, 4 heart, 5 star
+  const LASH = 0x3a2a22;
+
+  const eyesOpen = new PIXI.Graphics();
+  const rw = [15, 16.5, 16, 15, 16][shape], rh = [19, 14.5, 16, 15, 20.5][shape];
+  for (const s of [-1, 1]) {
+    const ex = s * 34, ey = HEAD_Y + 10;
+    eyesOpen.beginFill(0xffffff); eyesOpen.drawEllipse(ex, ey, rw, rh); eyesOpen.endFill();
+    const iy = ey + rh * 0.14;
+    eyesOpen.beginFill(iris); eyesOpen.drawEllipse(ex, iy, rw * 0.7, rh * 0.74); eyesOpen.endFill();
+    eyesOpen.beginFill(0x2a1a12); eyesOpen.drawEllipse(ex, iy + 1, rw * 0.4, rh * 0.46); eyesOpen.endFill();
+    eyesOpen.beginFill(0xffffff);
+    eyesOpen.drawCircle(ex - 4, ey - rh * 0.16, 4.2);
+    eyesOpen.drawCircle(ex + 5, ey + rh * 0.42, 2.2);
+    eyesOpen.endFill();
+    if (shape === 4) {
+      eyesOpen.beginFill(0xffffff, 0.95);
+      drawSparkle(eyesOpen, ex + 5, ey - rh * 0.3, 5);
+      eyesOpen.endFill();
+    }
+    let lidY = ey - rh * 0.68, peak = ey - rh * 1.16;
+    if (shape === 3) {
+      // sleepy: a soft lid lowered over the top of the eye
+      eyesOpen.beginFill(skin);
+      eyesOpen.drawRect(ex - rw - 2, ey - rh - 2, rw * 2 + 4, rh * 0.72);
+      eyesOpen.endFill();
+      lidY = ey - rh * 0.3; peak = ey - rh * 0.5;
+    }
+    eyesOpen.lineStyle({ width: lashes === 2 ? 2.6 : 4, color: LASH, cap: PIXI.LINE_CAP.ROUND });
+    eyesOpen.moveTo(ex - rw, lidY);
+    eyesOpen.quadraticCurveTo(ex, peak, ex + rw, lidY);
+    if (shape === 2) { // cat-eye flick
+      eyesOpen.moveTo(ex + s * rw, lidY);
+      eyesOpen.lineTo(ex + s * (rw + 9), lidY - 8);
+    }
+    if (lashes === 1) {
+      eyesOpen.lineStyle({ width: 2.6, color: LASH, cap: PIXI.LINE_CAP.ROUND });
+      for (const [dx, dy] of [[0.55, -0.18], [0.85, 0.0], [1.05, 0.22]]) {
+        const bx = ex + s * rw * dx, by = lidY - (1 - dx) * (lidY - peak) * 0.55;
+        eyesOpen.moveTo(bx, by);
+        eyesOpen.lineTo(bx + s * 7, by - 7 + dy * 10);
+      }
+    }
+    eyesOpen.lineStyle(0);
+    // brows
+    const by = ey - rh - 11;
+    eyesOpen.lineStyle({ width: brows === 3 ? 6 : 3.5, color: browColor, cap: PIXI.LINE_CAP.ROUND });
+    if (brows === 1) { // arched: lifts toward the outside
+      eyesOpen.moveTo(ex - s * 13, by + 3);
+      eyesOpen.quadraticCurveTo(ex + s * 4, by - 9, ex + s * 14, by - 1);
+    } else if (brows === 2) {
+      eyesOpen.moveTo(ex - 13, by - 2); eyesOpen.lineTo(ex + 13, by - 2);
+    } else {
+      eyesOpen.moveTo(ex - 13, by);
+      eyesOpen.quadraticCurveTo(ex, by - 6, ex + 13, by);
+    }
+    eyesOpen.lineStyle(0);
+  }
+  const eyesClosed = new PIXI.Graphics();
+  for (const s of [-1, 1]) {
+    const ex = s * 34, ey = HEAD_Y + 12;
+    eyesClosed.lineStyle({ width: 4.5, color: LASH, cap: PIXI.LINE_CAP.ROUND });
+    eyesClosed.moveTo(ex - 13, ey);
+    eyesClosed.quadraticCurveTo(ex, ey + 8, ex + 13, ey);
+  }
+  eyesClosed.visible = false;
+
+  const m = new PIXI.Graphics();
+  // blush
+  if (blush !== 3) {
+    const [bc, ba, bw, bh] = [[0xff8aa8, 0.4, 13, 8], [0xffa46a, 0.42, 13, 8], [0xff5f8f, 0.5, 16, 10]][blush] || [0xff8aa8, 0.4, 13, 8];
+    m.beginFill(bc, ba);
+    m.drawEllipse(-52, HEAD_Y + 34, bw, bh);
+    m.drawEllipse(52, HEAD_Y + 34, bw, bh);
+    m.endFill();
+  }
+  // details
+  const ink = darken(skin, 0.32);
+  if (marks === 1) {
+    m.beginFill(ink, 0.75);
+    for (const [fx, fy] of [[-58, 26], [-48, 30], [-40, 24], [-52, 20], [58, 26], [48, 30], [40, 24], [52, 20], [-6, 30], [6, 30], [0, 25]]) m.drawCircle(fx, HEAD_Y + fy, 2);
+    m.endFill();
+  } else if (marks === 2) {
+    m.beginFill(0x3a2a22); m.drawCircle(-50, HEAD_Y + 44, 2.8); m.endFill();
+  } else if (marks === 3) {
+    m.lineStyle({ width: 2.5, color: ink, alpha: 0.8, cap: PIXI.LINE_CAP.ROUND });
+    m.moveTo(-26, HEAD_Y + 42); m.quadraticCurveTo(-30, HEAD_Y + 48, -26, HEAD_Y + 54);
+    m.moveTo(26, HEAD_Y + 42); m.quadraticCurveTo(30, HEAD_Y + 48, 26, HEAD_Y + 54);
+    m.lineStyle(0);
+  } else if (marks === 4) {
+    m.beginFill(0xff5f9e); drawHeart(m, 54, HEAD_Y + 20, 6); m.endFill();
+  } else if (marks === 5) {
+    m.beginFill(0xffd35c); m.drawPolygon(starPoints(-54, HEAD_Y + 20, 5, 7, 3.2)); m.endFill();
+  }
+  // mouth
+  const my = HEAD_Y + 46;
+  if (mouth === 1) { // big grin
+    m.beginFill(darken(lip, 0.35));
+    m.moveTo(-13, my - 2);
+    m.quadraticCurveTo(0, my + 2, 13, my - 2);
+    m.quadraticCurveTo(10, my + 14, 0, my + 14);
+    m.quadraticCurveTo(-10, my + 14, -13, my - 2);
+    m.closePath();
+    m.endFill();
+    m.beginFill(0xffffff); m.drawRoundedRect(-8, my, 16, 4.5, 2); m.endFill();
+    m.lineStyle({ width: 3, color: lip, cap: PIXI.LINE_CAP.ROUND });
+    m.moveTo(-13, my - 2); m.quadraticCurveTo(0, my + 2, 13, my - 2);
+    m.lineStyle(0);
+  } else if (mouth === 2) { // smirk
+    m.lineStyle({ width: 4, color: lip, cap: PIXI.LINE_CAP.ROUND });
+    m.moveTo(-9, my + 3); m.quadraticCurveTo(2, my + 8, 12, my - 2);
+    m.lineStyle(0);
+  } else if (mouth === 3) { // pout
+    m.beginFill(lip);
+    m.drawEllipse(-4, my + 2, 5.5, 4);
+    m.drawEllipse(4, my + 2, 5.5, 4);
+    m.drawEllipse(0, my + 6, 7, 4.5);
+    m.endFill();
+    m.beginFill(0xffffff, 0.5); m.drawEllipse(-2, my + 6, 2.5, 1.4); m.endFill();
+  } else if (mouth === 4) { // cat smile
+    m.lineStyle({ width: 3.5, color: lip, cap: PIXI.LINE_CAP.ROUND });
+    m.moveTo(-12, my); m.quadraticCurveTo(-6, my + 8, 0, my + 1);
+    m.quadraticCurveTo(6, my + 8, 12, my);
+    m.lineStyle(0);
+  } else {
+    m.lineStyle({ width: 4, color: lip, cap: PIXI.LINE_CAP.ROUND });
+    m.moveTo(-10, my); m.quadraticCurveTo(0, my + 8, 10, my);
+    m.lineStyle(0);
+  }
+  face.addChild(eyesOpen, eyesClosed, m);
+  face.eyesOpen = eyesOpen;
+  face.eyesClosed = eyesClosed;
+  return face;
+}
+
+// ============================== auras ==============================
+
+function flake(g, r, col) {
+  g.lineStyle({ width: Math.max(2, r * 0.26), color: col, cap: PIXI.LINE_CAP.ROUND });
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI;
+    g.moveTo(Math.cos(a) * r, Math.sin(a) * r); g.lineTo(-Math.cos(a) * r, -Math.sin(a) * r);
+  }
+  g.lineStyle(0);
+}
+
+function buildAura(root, p) {
+  const layer = new PIXI.Container();
+  root.addChild(layer);
+  const parts = [];
+  const shape = p.shape || 'sparkle';
+  const add = (g, meta) => { g.meta = meta; layer.addChild(g); parts.push(g); };
+  if (shape === 'heart') {
+    // a real halo: hearts circling above her head…
+    for (let i = 0; i < 9; i++) {
+      const g = new PIXI.Graphics();
+      g.beginFill(0xffffff); drawHeart(g, 0, 0, 12); g.endFill();
+      g.beginFill(p.c1); drawHeart(g, 0, 0, 9.5); g.endFill();
+      g.beginFill(0xffffff, 0.7); g.drawCircle(-3, -3, 2.2); g.endFill();
+      add(g, { kind: 'ring', ph: (i / 9) * Math.PI * 2 });
+    }
+    // …and more drifting up beside her
+    for (let i = 0; i < 8; i++) {
+      const g = new PIXI.Graphics();
+      const r = rand(7, 12);
+      g.beginFill(0xffffff, 0.9); drawHeart(g, 0, 0, r + 2); g.endFill();
+      g.beginFill(i % 2 ? lighten(p.c1, 0.35) : p.c1); drawHeart(g, 0, 0, r); g.endFill();
+      add(g, { kind: 'rise', x: (i % 2 ? 1 : -1) * rand(84, 140), ph: i / 8, speed: rand(0.8, 1.2), sway: rand(0, 6) });
+    }
+  } else if (shape === 'flake') {
+    for (let i = 0; i < 18; i++) {
+      const g = new PIXI.Graphics();
+      const r = rand(7, 13);
+      flake(g, r + 1.5, 0x6fb4e6);
+      flake(g, r, 0xffffff);
+      g.beginFill(p.c1); g.drawCircle(0, 0, r * 0.28); g.endFill();
+      add(g, { kind: 'fall', x: rand(-150, 150), ph: i / 18 + rand(0, 0.04), speed: rand(0.8, 1.25), sway: rand(0, 6), spin: rand(-1, 1) });
+    }
+  } else {
+    for (let i = 0; i < 16; i++) {
+      const g = new PIXI.Graphics();
+      const r = rand(8, 15);
+      g.beginFill(p.c1); drawSparkle(g, 0, 0, r); g.endFill();
+      g.beginFill(0xffffff, 0.95); drawSparkle(g, 0, 0, r * 0.5); g.endFill();
+      const side = i % 2 ? 1 : -1;
+      add(g, { kind: 'twinkle', x: side * rand(70, 145), y: rand(-490, -30), ph: rand(0, Math.PI * 2), speed: rand(0.7, 1.4) });
+    }
+  }
+  return parts;
+}
+
+function updateAura(parts, t) {
+  for (const g of parts) {
+    const m = g.meta;
+    if (m.kind === 'ring') {
+      const a = t / 1300 + m.ph;
+      g.x = Math.cos(a) * 78;
+      g.y = HEAD_Y - HEAD_R - 26 + Math.sin(a) * 17;
+      const front = (Math.sin(a) + 1) / 2;
+      g.scale.set(0.72 + front * 0.4);
+      g.alpha = 0.6 + front * 0.4;
+    } else if (m.kind === 'rise') {
+      const u = (t / 3600 * m.speed + m.ph) % 1;
+      g.x = m.x + Math.sin(u * 7 + m.sway) * 12;
+      g.y = -40 - u * 400;
+      g.alpha = Math.sin(u * Math.PI);
+      g.scale.set(0.7 + u * 0.5);
+    } else if (m.kind === 'fall') {
+      const u = (t / 4200 * m.speed + m.ph) % 1;
+      g.x = m.x + Math.sin(u * 8 + m.sway) * 16;
+      g.y = -530 + u * 540;
+      g.alpha = Math.min(1, Math.sin(u * Math.PI) * 1.6);
+      g.rotation = t / 900 * m.spin;
+    } else {
+      const k = Math.abs(Math.sin(t / 520 * m.speed + m.ph));
+      g.x = m.x; g.y = m.y;
+      g.scale.set(0.25 + k * 0.95);
+      g.alpha = 0.35 + k * 0.65;
+      g.rotation = t / 1500;
+    }
+  }
 }
 
 // ============================== outfit pieces ==============================
@@ -352,6 +557,47 @@ function drawBackHair(p) {
       g.endFill();
       break;
     }
+    case 'starfall': {
+      // night-sky hair: a long fall that fades to pale tips, with stars caught
+      // in it and a couple drifting free
+      g.beginFill(c);
+      g.moveTo(-92, HEAD_Y - 10);
+      g.bezierCurveTo(-124, -250, -110, -150, -118, -60);
+      g.quadraticCurveTo(-76, -92, -58, -56);
+      g.quadraticCurveTo(-28, -96, 0, -60);
+      g.quadraticCurveTo(28, -96, 58, -56);
+      g.quadraticCurveTo(76, -92, 118, -60);
+      g.bezierCurveTo(110, -150, 124, -250, 92, HEAD_Y - 10);
+      g.closePath();
+      g.endFill();
+      // Pale tips as STRANDS, not a wash: a soft band across the bottom spilled
+      // out past the scalloped hem and read as a stray blue arc under the
+      // skirt. Vertical streaks stay inside the silhouette at any scale.
+      const tip = p.tips || lighten(c, 0.5);
+      for (const [tx, ty, tw, th] of [[-96, -108, 10, 34], [-62, -92, 9, 28], [-24, -108, 8, 26], [26, -100, 9, 30], [64, -88, 8, 24], [98, -112, 10, 32]]) {
+        g.beginFill(tip, 0.5);
+        g.drawEllipse(tx, ty, tw, th);
+        g.endFill();
+        g.beginFill(tip, 0.28);
+        g.drawEllipse(tx, ty - th * 0.9, tw * 0.8, th * 0.7);
+        g.endFill();
+      }
+      // shine sweep
+      g.beginFill(p.c2 || lighten(c, 0.32), 0.5);
+      g.drawEllipse(-70, -210, 15, 62);
+      g.drawEllipse(72, -196, 12, 50);
+      g.endFill();
+      // stars caught in the fall
+      g.beginFill(0xfff3b0, 0.95);
+      for (const [x, y, sz] of [[-88, -232, 9], [82, -252, 7], [-64, -132, 6], [96, -150, 8], [-100, -84, 5], [58, -80, 6]]) {
+        g.drawPolygon(starPoints(x, y, 5, sz, sz * 0.44));
+      }
+      g.endFill();
+      g.beginFill(0xffffff, 0.9);
+      for (const [x, y, sz] of [[-108, -300, 6], [104, -290, 5], [-40, -300, 4]]) drawSparkle(g, x, y, sz);
+      g.endFill();
+      break;
+    }
   }
   return g;
 }
@@ -378,49 +624,121 @@ function drawFrontHair(p) {
   return g;
 }
 
-function drawDress(p) {
-  const g = new PIXI.Graphics();
-  const c = p.c1, trim = p.c2 || lighten(p.c1, 0.4);
-  const top = SHOULDER_Y + 6;
-  // bodice
-  g.beginFill(c);
+// Where a skirt's pattern may go: the pattern is authored for a frame of
+// y -140..-10, x ±85 and stretched to each silhouette, then CLIPPED to the
+// dress outline so nothing can float over the legs or spill past the hem.
+const SKIRT_FRAME = {
+  mini: { top: -160, bot: -84, hw: 58 },
+  aline: { top: -160, bot: -36, hw: 82 },
+  tutu: { top: -166, bot: -100, hw: 90 },
+  ball: { top: -160, bot: 6, hw: 112 },
+  gown: { top: -160, bot: 4, hw: 82 },
+  mermaid: { top: -160, bot: 8, hw: 78 },
+  highlow: { top: -160, bot: 4, hw: 108 },
+};
+const ABSOLUTE_DECOS = ['zodiac', 'dragonscale', 'sakura', 'prism', 'bowline', 'none'];
+
+function bodicePath(g, top) {
   g.moveTo(-42, top);
   g.bezierCurveTo(-34, -230, -32, -215, -36, HIP_Y - 4);
   g.lineTo(36, HIP_Y - 4);
   g.bezierCurveTo(32, -215, 34, -230, 42, top);
   g.quadraticCurveTo(0, top - 14, -42, top);
   g.closePath();
-  g.endFill();
-  // straps
-  g.lineStyle({ width: 7, color: c, cap: PIXI.LINE_CAP.ROUND });
-  g.moveTo(-26, top - 6); g.lineTo(-12, top - 22);
-  g.moveTo(26, top - 6); g.lineTo(12, top - 22);
-  g.lineStyle(0);
+}
 
+function skirtPath(g, top, hemY, hemW, flare) {
+  g.moveTo(-36, top);
+  g.bezierCurveTo(-36 - hemW * flare, (top + hemY) / 2, -hemW, hemY + 14, -hemW, hemY);
+  g.quadraticCurveTo(0, hemY + 16, hemW, hemY);
+  g.bezierCurveTo(hemW, hemY + 14, 36 + hemW * flare, (top + hemY) / 2, 36, top);
+  g.closePath();
+}
+
+/** Trace the outer silhouette of a skirt (caller wraps in beginFill/endFill). */
+function skirtSilhouette(g, style) {
   const skirtTop = HIP_Y - 8;
-  switch (p.style) {
-    case 'mini':
-      skirt(g, c, trim, skirtTop, -95, 62, 0.4);
-      break;
-    case 'aline':
-      skirt(g, c, trim, skirtTop, -46, 84, 0.5);
-      break;
-    case 'tutu': {
-      g.beginFill(c, 0.55);
-      for (const [rx, ry, y] of [[92, 34, -92], [78, 30, -102], [64, 26, -110]]) g.drawEllipse(0, y, rx, ry);
-      g.endFill();
-      g.beginFill(c);
-      g.drawEllipse(0, -108, 52, 24);
-      g.endFill();
-      break;
-    }
-    case 'ball': {
-      g.beginFill(c);
+  switch (style) {
+    case 'mini': skirtPath(g, skirtTop, -95, 62, 0.4); break;
+    case 'aline': skirtPath(g, skirtTop, -46, 84, 0.5); break;
+    case 'tutu': g.drawEllipse(0, -134, 92, 34); break;
+    case 'ball':
       g.moveTo(-36, skirtTop);
       g.bezierCurveTo(-130, -80, -125, -30, -110, -6);
       g.quadraticCurveTo(0, 18, 110, -6);
       g.bezierCurveTo(125, -30, 130, -80, 36, skirtTop);
       g.closePath();
+      break;
+    case 'gown':
+      g.moveTo(-36, skirtTop);
+      g.bezierCurveTo(-70, -100, -88, -40, -80, -2);
+      g.quadraticCurveTo(0, 12, 80, -2);
+      g.bezierCurveTo(88, -40, 70, -100, 36, skirtTop);
+      g.closePath();
+      break;
+    case 'mermaid':
+      g.moveTo(-34, skirtTop);
+      g.bezierCurveTo(-42, -110, -35, -80, -35, -40);
+      g.bezierCurveTo(-70, -26, -78, -6, -84, 4);
+      g.quadraticCurveTo(0, 22, 84, 4);
+      g.bezierCurveTo(78, -6, 70, -26, 35, -40);
+      g.bezierCurveTo(35, -80, 42, -110, 34, skirtTop);
+      g.closePath();
+      break;
+    case 'highlow':
+      g.moveTo(-36, skirtTop);
+      g.bezierCurveTo(-110, -90, -118, -30, -108, -6);
+      g.quadraticCurveTo(0, 14, 108, -6);
+      g.bezierCurveTo(118, -30, 110, -90, 36, skirtTop);
+      g.closePath();
+      break;
+  }
+}
+
+function drawDress(p) {
+  const root = new PIXI.Container();
+  const g = new PIXI.Graphics();
+  root.addChild(g);
+  const c = p.c1, trim = p.c2 || lighten(p.c1, 0.4);
+  const top = SHOULDER_Y + 6;
+  const skirtTop = HIP_Y - 8;
+
+  // ---- skirt (drawn first so the bodice sits on top of the waist seam) ----
+  switch (p.style) {
+    case 'mini':
+    case 'aline': {
+      g.beginFill(c);
+      skirtSilhouette(g, p.style);
+      g.endFill();
+      break;
+    }
+    case 'tutu': {
+      // A tutu sits AT the waist: an opaque underskirt so legs never show
+      // through, then three layers of tulle, each a little shorter.
+      g.beginFill(darken(c, 0.14));
+      g.drawEllipse(0, -134, 92, 34);
+      g.endFill();
+      g.beginFill(c);
+      g.drawEllipse(0, -139, 84, 30);
+      g.endFill();
+      g.beginFill(lighten(c, 0.22));
+      g.drawEllipse(0, -145, 70, 25);
+      g.endFill();
+      g.beginFill(lighten(c, 0.4));
+      g.drawEllipse(0, -151, 54, 19);
+      g.endFill();
+      // scalloped tulle edge
+      g.beginFill(lighten(c, 0.5), 0.9);
+      for (let i = 0; i <= 10; i++) {
+        const a = Math.PI * (i / 10);
+        g.drawCircle(Math.cos(a) * 88, -134 + Math.sin(a) * 31, 5);
+      }
+      g.endFill();
+      break;
+    }
+    case 'ball': {
+      g.beginFill(c);
+      skirtSilhouette(g, 'ball');
       g.endFill();
       // panniers shading
       g.beginFill(trim, 0.5);
@@ -429,20 +747,11 @@ function drawDress(p) {
       g.quadraticCurveTo(0, -2, 20, -8);
       g.bezierCurveTo(34, -40, 40, -90, 0, skirtTop);
       g.endFill();
-      // hem
-      g.lineStyle({ width: 8, color: trim });
-      g.moveTo(-110, -6);
-      g.quadraticCurveTo(0, 18, 110, -6);
-      g.lineStyle(0);
       break;
     }
     case 'gown': {
       g.beginFill(c);
-      g.moveTo(-36, skirtTop);
-      g.bezierCurveTo(-70, -100, -88, -40, -80, -2);
-      g.quadraticCurveTo(0, 12, 80, -2);
-      g.bezierCurveTo(88, -40, 70, -100, 36, skirtTop);
-      g.closePath();
+      skirtSilhouette(g, 'gown');
       g.endFill();
       // side slit shine
       g.beginFill(trim, 0.6);
@@ -455,43 +764,106 @@ function drawDress(p) {
     }
     case 'mermaid': {
       g.beginFill(c);
-      g.moveTo(-34, skirtTop);
-      g.bezierCurveTo(-40, -110, -22, -80, -26, -40);
-      g.bezierCurveTo(-70, -26, -78, -6, -84, 4);
-      g.quadraticCurveTo(0, 22, 84, 4);
-      g.bezierCurveTo(78, -6, 70, -26, 26, -40);
-      g.bezierCurveTo(22, -80, 40, -110, 34, skirtTop);
-      g.closePath();
+      skirtSilhouette(g, 'mermaid');
       g.endFill();
-      // scales
-      g.beginFill(trim, 0.55);
-      for (let row = 0; row < 3; row++) {
-        for (let i = -2; i <= 2; i++) g.drawCircle(i * 16 + (row % 2) * 8, -128 + row * 16, 7);
+      if (p.deco !== 'dragonscale') {
+        g.beginFill(trim, 0.55);
+        for (let row = 0; row < 3; row++) {
+          for (let i = -1; i <= 1; i++) g.drawCircle(i * 16 + (row % 2) * 8 - 4, -128 + row * 16, 7);
+        }
+        g.endFill();
       }
+      break;
+    }
+    case 'highlow': {
+      // party dress: long floaty back, short twirly front
+      g.beginFill(darken(c, 0.12));
+      skirtSilhouette(g, 'highlow');
+      g.endFill();
+      g.beginFill(c);
+      g.moveTo(-36, skirtTop);
+      g.bezierCurveTo(-70, -125, -66, -95, -62, -78);
+      g.quadraticCurveTo(0, -58, 62, -78);
+      g.bezierCurveTo(66, -95, 70, -125, 36, skirtTop);
+      g.closePath();
       g.endFill();
       break;
     }
   }
-  drawDeco(g, p);
-  return g;
-}
 
-function skirt(g, c, trim, top, hemY, hemW, flare) {
+  // ---- bodice + straps ----
   g.beginFill(c);
-  g.moveTo(-36, top);
-  g.bezierCurveTo(-36 - hemW * flare, (top + hemY) / 2, -hemW, hemY + 14, -hemW, hemY);
-  g.quadraticCurveTo(0, hemY + 16, hemW, hemY);
-  g.bezierCurveTo(hemW, hemY + 14, 36 + hemW * flare, (top + hemY) / 2, 36, top);
-  g.closePath();
+  bodicePath(g, top);
   g.endFill();
-  g.lineStyle({ width: 6, color: trim });
-  g.moveTo(-hemW + 2, hemY + 1);
-  g.quadraticCurveTo(0, hemY + 17, hemW - 2, hemY + 1);
+  g.lineStyle({ width: 7, color: c, cap: PIXI.LINE_CAP.ROUND });
+  g.moveTo(-26, top - 6); g.lineTo(-12, top - 22);
+  g.moveTo(26, top - 6); g.lineTo(12, top - 22);
   g.lineStyle(0);
+
+  // ---- pattern, clipped to the dress outline ----
+  const deco = new PIXI.Graphics();
+  drawDeco(deco, p);
+  const f = SKIRT_FRAME[p.style];
+  if (f && !ABSOLUTE_DECOS.includes(p.deco)) {
+    const sy = (f.bot - f.top) / 130;
+    deco.scale.set(f.hw / 85, sy);
+    deco.y = f.top + 140 * sy;
+  }
+  const mask = new PIXI.Graphics();
+  mask.beginFill(0xffffff);
+  bodicePath(mask, top);
+  mask.endFill();
+  mask.beginFill(0xffffff);
+  skirtSilhouette(mask, p.style);
+  mask.endFill();
+  root.addChild(mask);
+  deco.mask = mask;
+  root.addChild(deco);
+
+  // ---- hems, belt and accents on top (never clipped) ----
+  const t = new PIXI.Graphics();
+  const hem = (hemW, hemY, w = 6) => {
+    t.lineStyle({ width: w, color: trim, cap: PIXI.LINE_CAP.ROUND });
+    t.moveTo(-hemW + 2, hemY + 1);
+    t.quadraticCurveTo(0, hemY + 17, hemW - 2, hemY + 1);
+    t.lineStyle(0);
+  };
+  if (p.style === 'mini') hem(62, -95);
+  else if (p.style === 'aline') hem(84, -46);
+  else if (p.style === 'ball') {
+    t.lineStyle({ width: 8, color: trim, cap: PIXI.LINE_CAP.ROUND });
+    t.moveTo(-108, -6);
+    t.quadraticCurveTo(0, 18, 108, -6);
+    t.lineStyle(0);
+  } else if (p.style === 'highlow') {
+    t.lineStyle({ width: 5, color: trim, cap: PIXI.LINE_CAP.ROUND });
+    t.moveTo(-62, -79);
+    t.quadraticCurveTo(0, -59, 62, -79);
+    t.lineStyle(0);
+  }
+  const belt = -166;
+  if (p.deco === 'bowline') {
+    t.beginFill(0xd1274b);
+    drawHeart(t, 0, belt - 90, 9);
+    t.endFill();
+    t.lineStyle({ width: 5, color: 0xffffff });
+    t.moveTo(-36, belt);
+    t.quadraticCurveTo(0, belt + 8, 36, belt);
+    t.lineStyle(0);
+  } else {
+    // waist ribbon: outlined so a white ribbon still shows on a white dress
+    t.beginFill(darken(trim, 0.22));
+    t.drawRoundedRect(-36, belt - 6, 72, 13, 6);
+    t.endFill();
+    t.beginFill(trim);
+    t.drawRoundedRect(-34, belt - 4, 68, 9, 4.5);
+    t.endFill();
+  }
+  root.addChild(t);
+  return root;
 }
 
 function drawDeco(g, p) {
-  const belt = -166;
   switch (p.deco) {
     case 'dots':
       g.beginFill(0xffffff, 0.85);
@@ -523,19 +895,11 @@ function drawDeco(g, p) {
       for (const [x, y, s] of [[-30, -110, 6], [65, -55, 6], [-65, -75, 5]]) drawSparkle(g, x, y, s);
       g.endFill();
       break;
-    case 'bowline':
-      g.beginFill(0xd1274b);
-      drawHeart(g, 0, belt - 90, 9);
-      g.endFill();
-      g.lineStyle({ width: 5, color: 0xffffff });
-      g.moveTo(-36, belt);
-      g.quadraticCurveTo(0, belt + 8, 36, belt);
-      g.lineStyle(0);
-      break;
     case 'stripes':
       g.beginFill(0xffffff, 0.75);
-      for (let i = -3; i <= 3; i++) {
-        g.drawPolygon([i * 26 - 7, -140, i * 26 + 7, -140, i * 26 + 16, -30, i * 26 + 2, -30]);
+      // drawn past every edge on purpose — the dress outline clips them
+      for (let i = -5; i <= 5; i++) {
+        g.drawPolygon([i * 24 - 5, -150, i * 24 + 5, -150, i * 30 + 8, 10, i * 30 - 8, 10]);
       }
       g.endFill();
       break;
@@ -581,12 +945,168 @@ function drawDeco(g, p) {
       }
       g.endFill();
       break;
-  }
-  // waist ribbon for most dresses
-  if (p.deco !== 'bowline' && p.style !== 'tutu') {
-    g.beginFill(p.c2 || lighten(p.c1, 0.4), 0.9);
-    g.drawRoundedRect(-34, belt - 4, 68, 10, 5);
-    g.endFill();
+    // ---- mythic decos (trial-locked endgame dresses) ----
+    case 'zodiac': {
+      // two turning orbit rings with a sun at the middle and glyph-stars pinned
+      // around the outer ring, like a star chart worn as a skirt
+      const cx = 0, cy = -76;
+      g.lineStyle({ width: 2.5, color: 0x9bd7f5, alpha: 0.55 });
+      g.drawEllipse(cx, cy, 78, 30);
+      g.drawEllipse(cx, cy, 54, 62);
+      g.lineStyle({ width: 2, color: 0xffe08a, alpha: 0.4 });
+      g.drawCircle(cx, cy, 40);
+      g.lineStyle(0);
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        const rx = Math.cos(a) * 78, ry = Math.sin(a) * 30;
+        const s = i % 3 === 0 ? 6.5 : 4;
+        g.beginFill(i % 3 === 0 ? 0xffe08a : 0xffffff, 0.95);
+        g.drawPolygon(starPoints(cx + rx, cy + ry, i % 3 === 0 ? 5 : 4, s, s * 0.4));
+        g.endFill();
+      }
+      g.beginFill(0xffe08a, 0.22); g.drawCircle(cx, cy, 26); g.endFill();
+      g.beginFill(0xfff3b0, 0.95); g.drawCircle(cx, cy, 13); g.endFill();
+      g.beginFill(0xffffff, 0.9); g.drawCircle(cx - 4, cy - 4, 4); g.endFill();
+      // a moon riding the inner ring
+      g.beginFill(0xdff3fb, 0.95);
+      g.drawCircle(cx + 46, cy - 40, 9);
+      g.beginHole(); g.drawCircle(cx + 51, cy - 44, 6.5); g.endHole();
+      g.endFill();
+      break;
+    }
+    case 'dragonscale': {
+      // Scales laid out against the mermaid silhouette itself, so they never
+      // spill past the hem the way a fixed grid did. halfWidth(y) mirrors the
+      // 'mermaid' path in drawDress: narrow column down to y -40, then a flare.
+      const halfWidth = (y) => (y <= -40
+        ? 26 + ((-40 - y) / 126) * 8          // -166..-40 : 34 -> 26
+        : 26 + ((y + 40) / 44) * 58);         // -40..+4   : 26 -> 84
+      const scale = (x, y, r, t) => {
+        // teardrop plate: ember at the hem, deep crimson up the bodice, with a
+        // dark rim so overlapping plates read as armour instead of beads
+        g.lineStyle({ width: 1.4, color: 0x40060f, alpha: 0.55 });
+        g.beginFill(mixColor(0xff8c2a, 0x6a0f22, t), 0.98);
+        g.moveTo(x, y - r);
+        g.bezierCurveTo(x + r * 0.98, y - r * 0.45, x + r * 0.82, y + r * 0.8, x, y + r * 0.9);
+        g.bezierCurveTo(x - r * 0.82, y + r * 0.8, x - r * 0.98, y - r * 0.45, x, y - r);
+        g.closePath();
+        g.endFill();
+        g.lineStyle(0);
+        g.beginFill(mixColor(0xffd35c, 0xc42a1e, t), 0.85);
+        g.drawEllipse(x, y - r * 0.1, r * 0.5, r * 0.45);
+        g.endFill();
+        g.beginFill(0xfff3b0, 0.7 - t * 0.45);
+        g.drawEllipse(x - r * 0.16, y - r * 0.36, r * 0.24, r * 0.18);
+        g.endFill();
+      };
+      let row = 0;
+      for (let y = -150; y <= 2; y += 13, row++) {
+        const t = Math.max(0, 1 - (y + 150) / 140);     // 1 at the waist, 0 at the hem
+        const r = 7.5 + (1 - t) * 5.5;                  // plates grow toward the hem
+        const hw = halfWidth(y) - r * 1.1;              // keep the whole plate inside
+        if (hw <= r * 0.4) { scale(0, y, r, t); continue; }
+        const step = r * 1.7;                           // < 2r so plates overlap
+        const n = Math.max(1, Math.round((hw * 2) / step));
+        for (let i = 0; i <= n; i++) {
+          const x = -hw + (i * (hw * 2)) / n + (row % 2 ? step * 0.5 : 0);
+          if (Math.abs(x) > hw) continue;
+          scale(x, y, r, t);
+        }
+      }
+      // molten seam glowing between the scales
+      const seam = [[-6, -160], [5, -132], [-7, -104], [6, -74], [-8, -44], [4, -14]];
+      g.lineStyle({ width: 6, color: 0xff5a1a, alpha: 0.55, cap: PIXI.LINE_CAP.ROUND, join: PIXI.LINE_JOIN.ROUND });
+      g.moveTo(seam[0][0], seam[0][1]);
+      for (const [sx, sy] of seam.slice(1)) g.lineTo(sx, sy);
+      g.lineStyle({ width: 2.4, color: 0xfff3b0, alpha: 0.95, cap: PIXI.LINE_CAP.ROUND, join: PIXI.LINE_JOIN.ROUND });
+      g.moveTo(seam[0][0], seam[0][1]);
+      for (const [sx, sy] of seam.slice(1)) g.lineTo(sx, sy);
+      g.lineStyle(0);
+      // embers lifting off the tail
+      g.beginFill(0xffd35c, 0.95);
+      for (const [x, y, sz] of [[-40, -18, 5], [44, -24, 4.5], [-58, -2, 4], [56, -6, 3.5], [0, -172, 4]]) drawSparkle(g, x, y, sz);
+      g.endFill();
+      break;
+    }
+    case 'sakura': {
+      // blossom branch across the high hem with petals drifting off it
+      g.lineStyle({ width: 4, color: 0x6b4632, alpha: 0.85, cap: PIXI.LINE_CAP.ROUND });
+      g.moveTo(-92, -32);
+      g.bezierCurveTo(-50, -60, -6, -52, 34, -84);
+      g.moveTo(-28, -50); g.lineTo(-16, -74);
+      g.moveTo(12, -62); g.lineTo(26, -44);
+      g.lineStyle(0);
+      const blossom = (x, y, s, a = 1) => {
+        for (let k = 0; k < 5; k++) {
+          const b = (k / 5) * Math.PI * 2 - 0.4;
+          g.beginFill(k % 2 ? 0xffffff : 0xffc9e2, a);
+          g.drawEllipse(x + Math.cos(b) * s * 0.8, y + Math.sin(b) * s * 0.8, s * 0.62, s * 0.5);
+          g.endFill();
+        }
+        g.beginFill(0xff5f9e, a); g.drawCircle(x, y, s * 0.3); g.endFill();
+      };
+      for (const [x, y, s] of [[-84, -34, 9], [-46, -52, 11], [-14, -76, 9], [16, -58, 10], [36, -86, 12], [-66, -18, 8]]) blossom(x, y, s);
+      // loose petals falling toward the long back hem
+      g.beginFill(0xffd1dc, 0.9);
+      for (const [x, y, r] of [[-70, 4, 5], [-24, -10, 4.5], [22, -4, 5], [62, -26, 4.5], [88, -8, 5], [48, 6, 4]]) {
+        g.drawEllipse(x, y, r, r * 0.62);
+      }
+      g.endFill();
+      break;
+    }
+    case 'prism': {
+      // White light hitting a diamond at the waist and fanning out across the
+      // skirt as a rainbow. Each band's length is measured against the ball
+      // silhouette so the fan can never spill off the gown.
+      const cx = 0, cy = -140;
+      const halfW = (y) => (36 + ((y + 166) / 160) * 74) * 0.94;   // 'ball' skirt, inset
+      const inside = (x, y) => y <= 4 && Math.abs(x) <= halfW(y);
+      const reach = (a) => {
+        let r = 24;
+        while (r < 156 && inside(cx + Math.cos(a) * (r + 5), cy + Math.sin(a) * (r + 5))) r += 5;
+        return r;
+      };
+      const bands = [0xff5f9e, 0xf5a91a, 0xffd35c, 0x46c791, 0x5ba8ec, 0x8a5fc0];
+      const a0 = 0.42, span = (Math.PI - a0 * 2) / bands.length;
+      bands.forEach((col, i) => {
+        const s0 = a0 + i * span, s1 = s0 + span;
+        const r0 = reach(s0), r1 = reach(s1), rm = reach((s0 + s1) / 2);
+        g.beginFill(col, 0.6);
+        g.moveTo(cx, cy);
+        g.lineTo(cx + Math.cos(s0) * r0, cy + Math.sin(s0) * r0);
+        g.quadraticCurveTo(cx + Math.cos((s0 + s1) / 2) * rm, cy + Math.sin((s0 + s1) / 2) * rm,
+          cx + Math.cos(s1) * r1, cy + Math.sin(s1) * r1);
+        g.closePath();
+        g.endFill();
+      });
+      // starburst of incoming light above the stone
+      g.beginFill(0xffffff, 0.85);
+      for (let i = 0; i < 8; i++) {
+        const a = -Math.PI / 2 + (i - 3.5) * 0.2;
+        g.drawPolygon([
+          cx + Math.cos(a) * 34, cy + Math.sin(a) * 34,
+          cx + Math.cos(a + 0.05) * 6, cy + Math.sin(a + 0.05) * 6,
+          cx + Math.cos(a - 0.05) * 6, cy + Math.sin(a - 0.05) * 6,
+        ]);
+      }
+      g.endFill();
+      // the diamond itself — outlined, or it vanishes into a white gown
+      g.beginFill(0xc0a8ff, 0.3); g.drawCircle(cx, cy, 36); g.endFill();
+      g.lineStyle({ width: 2.5, color: 0x8a5fc0, alpha: 0.9 });
+      g.beginFill(0xffffff, 0.99); drawDiamond(g, cx, cy, 26); g.endFill();
+      g.lineStyle(0);
+      g.beginFill(0xc0a8ff, 0.55);
+      g.drawPolygon([cx, cy - 26, cx + 20, cy, cx, cy + 26]);
+      g.endFill();
+      g.lineStyle({ width: 2, color: 0xffffff, alpha: 0.95 });
+      g.moveTo(cx - 20, cy); g.lineTo(cx + 20, cy);
+      g.moveTo(cx, cy - 26); g.lineTo(cx, cy + 26);
+      g.lineStyle(0);
+      g.beginFill(0xffffff, 0.95);
+      for (const [x, y, sz] of [[-52, -186, 6], [46, -190, 5], [-86, -24, 5], [88, -28, 5], [0, -8, 4]]) drawSparkle(g, x, y, sz);
+      g.endFill();
+      break;
+    }
   }
 }
 
@@ -642,6 +1162,37 @@ function drawShoes(p) {
         g.endFill();
       }
       break;
+    case 'crystal': {
+      // faceted heels that look grown, not cobbled — shards spraying up the ankle
+      for (const s of [-1, 1]) {
+        const bx = s * 20;
+        g.beginFill(c, 0.82);
+        g.moveTo(bx - s * 17, -22); g.quadraticCurveTo(bx, -30, bx + s * 15, -13);
+        g.lineTo(bx + s * 15, -4); g.lineTo(bx + s * 9, 0); g.lineTo(bx - s * 11, 0);
+        g.lineTo(bx - s * 17, -9); g.closePath();
+        g.endFill();
+        // facets
+        g.lineStyle({ width: 1.8, color: 0xffffff, alpha: 0.9 });
+        g.moveTo(bx - s * 17, -22); g.lineTo(bx, -6);
+        g.moveTo(bx + s * 15, -13); g.lineTo(bx - s * 4, -2);
+        g.lineStyle(0);
+        // shard heel
+        g.beginFill(p.c2 || 0xc39aec, 0.85);
+        g.drawPolygon([bx - s * 16, -9, bx - s * 10, -9, bx - s * 13, 0]);
+        g.endFill();
+        // crystal spray climbing the ankle
+        for (const [dx, dy, h, w] of [[-2, -26, 16, 5], [6, -30, 22, 4], [-9, -30, 12, 4]]) {
+          g.beginFill(p.c2 || 0xc39aec, 0.7);
+          g.drawPolygon([bx + s * dx, dy, bx + s * dx + w, dy - h, bx + s * dx + w * 2, dy]);
+          g.endFill();
+        }
+        g.beginFill(0xffffff, 0.95);
+        drawSparkle(g, bx, -18, 6);
+        drawSparkle(g, bx + s * 8, -38, 4);
+        g.endFill();
+      }
+      break;
+    }
   }
   return g;
 }
@@ -742,6 +1293,52 @@ function drawHat(p) {
       g.endFill();
       break;
     }
+    case 'diadem': {
+      // a full imperial diadem: winged side sweeps, tall centre spire, a big
+      // stone at the heart and a drop pearl under it
+      const c1 = p.c1, c2 = p.c2 || 0xff5f9e;
+      // wing sweeps
+      for (const s of [-1, 1]) {
+        g.beginFill(c1, 0.95);
+        g.moveTo(s * 30, topY + 2);
+        g.quadraticCurveTo(s * 74, topY - 34, s * 86, topY - 6);
+        g.quadraticCurveTo(s * 62, topY - 4, s * 44, topY + 12);
+        g.closePath();
+        g.endFill();
+        g.beginFill(lighten(c1, 0.35), 0.9);
+        g.drawEllipse(s * 62, topY - 12, 10, 4);
+        g.endFill();
+      }
+      // band + spires
+      g.beginFill(c1);
+      g.moveTo(-52, topY + 12);
+      g.lineTo(-42, topY - 20);
+      g.lineTo(-26, topY + 2);
+      g.lineTo(-13, topY - 40);
+      g.lineTo(0, topY - 62);
+      g.lineTo(13, topY - 40);
+      g.lineTo(26, topY + 2);
+      g.lineTo(42, topY - 20);
+      g.lineTo(52, topY + 12);
+      g.quadraticCurveTo(0, topY + 24, -52, topY + 12);
+      g.closePath();
+      g.endFill();
+      g.beginFill(lighten(c1, 0.4), 0.75);
+      g.drawRoundedRect(-50, topY + 8, 100, 6, 3);
+      g.endFill();
+      // heart stone + halo
+      g.beginFill(c2, 0.3); g.drawCircle(0, topY - 16, 20); g.endFill();
+      g.beginFill(c2); drawHeart(g, 0, topY - 16, 13); g.endFill();
+      g.beginFill(0xffffff, 0.85); g.drawCircle(-4, topY - 22, 3.5); g.endFill();
+      // spire tips + drop pearl
+      g.beginFill(0xffffff, 0.95);
+      for (const [x, y, sz] of [[0, -66, 7], [-42, -22, 4.5], [42, -22, 4.5]]) drawSparkle(g, x, topY + y + 4, sz);
+      g.endFill();
+      g.beginFill(0xfdf6ee);
+      g.drawEllipse(0, topY + 26, 6, 8);
+      g.endFill();
+      break;
+    }
     case 'crown': {
       g.beginFill(p.c1);
       g.moveTo(-46, topY + 8);
@@ -821,6 +1418,45 @@ function drawNecklace(p) {
         g.endFill();
       }
       break;
+    case 'royalgem': {
+      // a collar of set stones carrying one huge teardrop ruby
+      const gold = p.c2 || 0xffd35c;
+      g.lineStyle({ width: 4, color: gold, alpha: 0.95 });
+      g.moveTo(-30, y - 10);
+      g.quadraticCurveTo(0, y + 14, 30, y - 10);
+      g.lineStyle(0);
+      g.beginFill(gold);
+      for (let i = -3; i <= 3; i++) {
+        const t = i / 3;
+        g.drawCircle(t * 28, y - 4 + (1 - t * t) * 14, 4.5);
+      }
+      g.endFill();
+      g.beginFill(0xffffff, 0.9);
+      for (let i = -3; i <= 3; i += 2) {
+        const t = i / 3;
+        g.drawCircle(t * 28 - 1.4, y - 5.4 + (1 - t * t) * 14, 1.5);
+      }
+      g.endFill();
+      // setting + the stone
+      g.beginFill(gold);
+      g.drawPolygon([-9, y + 12, 9, y + 12, 13, y + 20, -13, y + 20]);
+      g.endFill();
+      g.beginFill(p.c1, 0.35); g.drawCircle(0, y + 34, 22); g.endFill();
+      g.beginFill(p.c1);
+      g.moveTo(0, y + 18);
+      g.bezierCurveTo(16, y + 24, 17, y + 44, 0, y + 48);
+      g.bezierCurveTo(-17, y + 44, -16, y + 24, 0, y + 18);
+      g.closePath();
+      g.endFill();
+      g.beginFill(lighten(p.c1, 0.45), 0.85);
+      g.drawEllipse(-4, y + 30, 4, 7);
+      g.endFill();
+      g.beginFill(0xffffff, 0.95);
+      drawSparkle(g, 12, y + 22, 5);
+      drawSparkle(g, -13, y + 40, 4);
+      g.endFill();
+      break;
+    }
   }
   return g;
 }
@@ -892,6 +1528,34 @@ function drawBag(p) {
       drawSparkle(g, x + 10, y + 14, 6);
       g.endFill();
       break;
+    case 'comet': {
+      // a clutch shaped like a falling star, trailing light behind her hand
+      const tail = p.c2 || 0xffe08a;
+      for (let i = 0; i < 3; i++) {
+        g.beginFill(tail, 0.32 - i * 0.09);
+        g.moveTo(x + 4, y + 6);
+        g.quadraticCurveTo(x + 40 + i * 14, y - 16 - i * 8, x + 62 + i * 18, y - 40 - i * 14);
+        g.quadraticCurveTo(x + 34 + i * 10, y - 4 - i * 4, x + 6, y + 16);
+        g.closePath();
+        g.endFill();
+      }
+      g.lineStyle({ width: 4, color: 0x8a7ab8 });
+      g.moveTo(x - 10, y - 6);
+      g.quadraticCurveTo(x, y - 26, x + 10, y - 6);
+      g.lineStyle(0);
+      g.beginFill(p.c1);
+      g.drawPolygon(starPoints(x, y + 12, 5, 26, 12));
+      g.endFill();
+      g.beginFill(tail, 0.9);
+      g.drawPolygon(starPoints(x, y + 12, 5, 15, 6.5));
+      g.endFill();
+      g.beginFill(0xffffff, 0.95);
+      g.drawCircle(x - 5, y + 6, 3.4);
+      drawSparkle(g, x + 20, y - 8, 5);
+      drawSparkle(g, x - 16, y + 26, 4);
+      g.endFill();
+      break;
+    }
   }
   return g;
 }
@@ -919,6 +1583,53 @@ function drawWings(p) {
   const c = new PIXI.Container();
   const g = new PIXI.Graphics();
   const col = p.c1, edge = p.gold ? 0xf3b93c : 0xa8d8f0;
+  if (p.phoenix) {
+    // Same silhouette as the other wings so she still reads as winged, but
+    // built from three nested layers of fire with feather splits and embers.
+    const anchor = [20, -270];
+    const wingPath = (s, k) => {
+      const px = (x) => s * (anchor[0] + (x - anchor[0]) * k);
+      const py = (y) => anchor[1] + (y - anchor[1]) * k;
+      g.moveTo(px(20), py(-270));
+      g.bezierCurveTo(px(150), py(-400), px(190), py(-300), px(60), py(-230));
+      g.bezierCurveTo(px(150), py(-250), px(130), py(-160), px(30), py(-190));
+      g.closePath();
+    };
+    for (const s of [-1, 1]) {
+      for (const [k, col, a] of [[1, 0xc42a1e, 0.92], [0.8, 0xff7a1a, 0.95], [0.56, p.c2 || 0xffe08a, 0.95]]) {
+        g.beginFill(col, a);
+        wingPath(s, k);
+        g.endFill();
+      }
+      // feather splits — kept short so they stay on the plumage instead of
+      // shooting past the wingtip like whiskers
+      g.lineStyle({ width: 3, color: 0x8e1a12, alpha: 0.4, cap: PIXI.LINE_CAP.ROUND });
+      for (let i = 0; i < 4; i++) {
+        const a2 = -0.95 + i * 0.28;
+        g.moveTo(s * (34 + Math.cos(a2) * 26), -262 + Math.sin(a2) * 20);
+        g.lineTo(s * (34 + Math.cos(a2) * 84), -262 + Math.sin(a2) * 66);
+      }
+      g.lineStyle(0);
+      // hot leading edge
+      g.lineStyle({ width: 5, color: 0xffd35c, alpha: 0.9 });
+      g.moveTo(s * 20, -270);
+      g.bezierCurveTo(s * 150, -400, s * 190, -300, s * 60, -230);
+      g.lineStyle(0);
+      // embers drifting off the wingtip
+      g.beginFill(0xffd35c, 0.9);
+      for (const [ex, ey, r] of [[150, -358, 5], [178, -300, 4], [120, -232, 3.5], [196, -336, 3]]) {
+        g.drawCircle(s * ex, ey, r);
+      }
+      g.endFill();
+    }
+    g.beginFill(0xfff3b0, 0.95);
+    for (const [x, y, sz] of [[-166, -388, 7], [170, -374, 6], [-108, -206, 5], [112, -200, 5]]) drawSparkle(g, x, y, sz);
+    g.endFill();
+    c.addChild(g);
+    c.pivot.set(0, -260);
+    c.position.set(0, -260);
+    return c;
+  }
   for (const s of [-1, 1]) {
     g.beginFill(col, 0.85);
     g.moveTo(s * 20, -270);
@@ -938,6 +1649,57 @@ function drawWings(p) {
   c.pivot.set(0, -260);
   c.position.set(0, -260);
   return c;
+}
+
+/**
+ * Cosmic Orbit: a ringed planet at her shoulder with three moons on their own
+ * tilted paths. Returns { container, ring, moons } so charUpdate can spin it.
+ */
+function drawOrbit(p) {
+  const c = new PIXI.Container();
+  const back = new PIXI.Graphics();
+  const front = new PIXI.Container();
+
+  // orbit paths (static, drawn behind everything)
+  const paths = [
+    { rx: 84, ry: 28, rot: -0.25 },
+    { rx: 66, ry: 40, rot: 0.55 },
+    { rx: 96, ry: 19, rot: 0.15 },
+  ];
+  paths.forEach((o, i) => {
+    const ring = new PIXI.Graphics();
+    ring.lineStyle({ width: 2, color: i % 2 ? (p.c2 || 0xff8fc7) : (p.c1 || 0x9bd7f5), alpha: 0.45 });
+    ring.drawEllipse(0, 0, o.rx, o.ry);
+    ring.lineStyle(0);
+    ring.rotation = o.rot;
+    back.addChild(ring);
+  });
+
+  // the planet itself, tucked up by her shoulder
+  const planet = new PIXI.Graphics();
+  planet.beginFill(0x6f5ad0, 0.35); planet.drawCircle(0, 0, 26); planet.endFill();
+  planet.beginFill(0x8a5fc0); planet.drawCircle(0, 0, 17); planet.endFill();
+  planet.beginFill(0xa66ae0, 0.9); planet.drawEllipse(-4, -5, 9, 6); planet.endFill();
+  planet.beginFill(0xc39aec, 0.8); planet.drawCircle(6, 5, 4); planet.endFill();
+  planet.lineStyle({ width: 4.5, color: p.c2 || 0xffd35c, alpha: 0.9 });
+  planet.drawEllipse(0, 2, 28, 9);
+  planet.lineStyle({ width: 1.6, color: 0xffffff, alpha: 0.7 });
+  planet.drawEllipse(0, 2, 28, 9);
+  planet.lineStyle(0);
+
+  const moons = paths.map((o, i) => {
+    const m = new PIXI.Graphics();
+    const col = [p.c1 || 0x9bd7f5, p.c2 || 0xff8fc7, 0xfff3b0][i % 3];
+    m.beginFill(col, 0.3); m.drawCircle(0, 0, 13); m.endFill();
+    m.beginFill(col); m.drawPolygon(starPoints(0, 0, 5, 9, 4)); m.endFill();
+    m.beginFill(0xffffff, 0.9); m.drawCircle(-2, -2, 2.2); m.endFill();
+    m.meta = o;
+    front.addChild(m);
+    return m;
+  });
+
+  c.addChild(back, planet, front);
+  return { c, moons };
 }
 
 function drawButterfly(color) {

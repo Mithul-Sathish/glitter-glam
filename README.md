@@ -17,48 +17,65 @@ Works on desktop and mobile (touch-first, responsive portrait & landscape).
 ## The loop
 
 1. **Minigames** (6 of them) earn coins:
-   - ⭐ **Star Catch** — tap falling stars, chain combos, dodge storm clouds
+   - ⭐ **Star Catch** — tap falling stars, complete linked constellations for
+     a bonus, grab shooting stars, dodge storm clouds
    - 🃏 **Memory Match** — find 8 fashion pairs, speed bonus for fast clears
-   - 🫧 **Bubble Pop** — pop sparkly bubbles, golden ones pay big
-   - 🎵 **Runway Rhythm** — 3-lane tap-to-the-beat with Perfect/Good timing
+   - 🫧 **Bubble Pop** — the banner names a target colour; that colour scores
+     big, other colours are safe but worth less
+   - 🎵 **Runway Rhythm** — 3-lane tap-to-the-beat (keys 1·2·3) that speeds up
+     through 7 speed levels
    - 👀 **Style Rush** — "find the Ruby Heels!" reaction rounds
-   - 💎 **Sparkle Simon** — repeat ever-longer gem sequences
-2. **Coins** buy outfits in the **Wardrobe** (74 items across hair, dresses,
-   shoes, hair deco, necklaces, bags and magic extras — fairy wings, glitter
-   auras, orbiting stars, butterfly swarms — plus 6 skin tones, all drawn
-   procedurally in Pixi). Wearing any 5★ piece adds an automatic luxury
-   shimmer to your whole look.
-3. **Lifetime earnings level you up**, unlocking rarer item tiers — a natural
-   ramp from a free sundress to the Galaxy Princess ballgown.
-4. **Fashion Show**: you + 3 NPC rivals walk the red carpet with clapping
-   crowds, camera flashes and an applause meter; judges reveal scores worst-to-
-   best and crown Best Dressed. Rarer outfits score higher. Big coin rewards.
+   - 💎 **Encore** — repeat ever-longer gem sequences, 3 lives
+2. **Coins** buy outfits in the **Wardrobe** (hair, dresses, shoes, hair deco,
+   necklaces, bags and magic extras — fairy wings, heart halos, snow shimmer,
+   glitter auras — all drawn procedurally in Pixi). Any item can be **tried
+   on** before buying.
+3. **Mythic items** can't be bought with coins alone: each has trials (reach a
+   level, win runways, collect items, beat minigame scores) shown in the
+   wardrobe; finishing them unlocks the price tag.
+4. **My Look**: 10 skin tones, hair dye, eye colours, eye shapes, brows,
+   lashes, smiles, lip colours, blush and details. Save up to 4 looks, shuffle
+   an outfit, or **snap a photo** of your character to download.
+5. **Lifetime earnings level you up**. Each level pays a coin bonus, unlocks
+   rarer tiers and earns stylist titles from Style Newbie to Queen of Glam.
+6. **Fashion Show**: you + 3 NPC rivals walk the red carpet; every judges'
+   rating is out of 10.
 
-A **daily gift** pays bonus coins that scale with your level — claiming on
-consecutive days builds a 🔥 streak that raises the payout. Your **first 3
-games pay double coins**, and starter items are priced so the first session
-delivers several unlocks. Any item — even locked ones — can be **tried on**
-in the wardrobe before buying.
+**Daily**: an attendance calendar pays coins for each day in a row (a gift
+item on day 7, one missed day is forgiven), plus three daily challenges with a
+bonus for finishing all of them. **Rankings** show a medal and a league
+position for every minigame (the rivals are in-game characters, not real
+players) along with runway records.
+
+**Saving**: progress is written to `localStorage` after every round, purchase
+and outfit change, again whenever the tab is hidden or closed, and to a backup
+key that is used if the main save is damaged. The save button on the home
+screen gives a copyable save code for moving progress to another browser or
+device.
+
+**Accounts and world rankings (optional)**: the small server in `server/`
+adds nickname accounts, cloud saves and real-player rankings. It is off unless
+`ONLINE_API` is set in `src/config.js`; see `server/README.md`. Left empty, the
+game has no accounts and makes no network requests.
 
 🌙 **Night mode**: the moon button on the home screen switches the whole
 boutique into a starry evening theme (crescent moon, deepened colors, brighter
 sparkles); every scene keeps its hue identity, just after dark. Persisted with
 the save.
 
-Progress is saved in `localStorage`.
-
-## Desktop & CrazyGames readiness
+## Desktop & portal readiness
 
 - Global UI scale: the interface renders at 1× on phones and up to 2× on
   large screens, so nothing looks tiny on desktop; text re-rasterizes crisply.
 - Keyboard controls on desktop: Runway Rhythm (arrows / D·F·J / 1-2-3) and
-  Sparkle Simon (arrows / 1-4); every game also plays with mouse or touch.
+  Encore (arrows / 1-4); every game also plays with mouse or touch.
 - Fully self-contained: no external requests (fonts, CDNs, analytics), no
-  login, instant load — iframe-friendly for portals like CrazyGames.
+  login, instant load — iframe-friendly for game portals.
 - Audio starts only after a user gesture (autoplay-policy safe).
-- CrazyGames SDK v3 wired via `src/portal.js` (init, gameplayStart/Stop,
-  happytime on wins/level-ups); every call no-ops when the SDK is absent,
-  so the same build runs anywhere.
+- `src/portal.js` is a thin adapter for a portal SDK. No SDK script is
+  loaded by default, so every call is a no-op and the page makes no outside
+  requests. To publish on CrazyGames, add their SDK script tag back to
+  `index.html`.
 
 ## Tech notes
 

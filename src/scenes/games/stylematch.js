@@ -90,14 +90,29 @@ export class StyleMatchScene extends MinigameScene {
     shuffle(styles).forEach((st, i) => {
       const c = new PIXI.Container();
       const g = new PIXI.Graphics();
-      g.beginFill(0xffffff, 0.95);
+      // Tinted card (never white) plus a dark outline behind the icon, so
+      // white items and white details stay visible.
+      g.beginFill(0x1f6b4a, 0.35);
+      g.drawRoundedRect(-cs / 2 + 2, -cs / 2 + 5, cs, cs, 16);
+      g.endFill();
+      g.beginFill(0x5b4a8a);
       g.drawRoundedRect(-cs / 2, -cs / 2, cs, cs, 16);
       g.endFill();
-      g.lineStyle({ width: 3, color: 0xbfe0cd });
+      g.beginFill(0x7a66b0);
+      g.drawRoundedRect(-cs / 2 + 5, -cs / 2 + 5, cs - 10, cs - 10, 12);
+      g.endFill();
+      g.lineStyle({ width: 3, color: 0xffffff, alpha: 0.85 });
       g.drawRoundedRect(-cs / 2, -cs / 2, cs, cs, 16);
       g.lineStyle(0);
       c.addChild(g);
-      const ic = makeIcon(st.icon, cs * 0.52, st.color);
+      const iconSize = cs * 0.52;
+      for (const [ox2, oy2] of [[-2.5, 0], [2.5, 0], [0, -2.5], [0, 2.5], [0, 4]]) {
+        const sh = makeIcon(st.icon, iconSize, st.color);
+        sh.tint = 0x2a1a44;
+        sh.position.set(ox2, oy2);
+        c.addChild(sh);
+      }
+      const ic = makeIcon(st.icon, iconSize, st.color);
       c.addChild(ic);
       c.position.set(ox + (i % cols) * (cs + 12), oy + Math.floor(i / cols) * (cs + 12));
       c.eventMode = 'static';

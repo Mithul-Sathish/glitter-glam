@@ -1,5 +1,6 @@
-// Bubble Pop: sparkly bubbles drift up — pop them! Golden bubbles rain bonus
-// points, thorny ones sting.
+// Bubble Pop: bubbles drift up — pop them! The banner names a TARGET colour:
+// those are worth the most, and popping them in a row builds a streak. Other
+// colours still score a little. Golden bubbles pay bonus points, thorny ones sting.
 
 import { MinigameScene } from '../minigame.js';
 import { G } from '../../game.js';
@@ -7,7 +8,16 @@ import { makeIcon } from '../../ui.js';
 import { sparkleBurst, floatText, shake } from '../../effects.js';
 import { tween, Ease } from '../../tween.js';
 import { Sfx } from '../../sound.js';
-import { rand, choice } from '../../util.js';
+import { rand, choice, darken } from '../../util.js';
+
+const COLOURS = [
+  { name: 'MINT', hex: 0x4fd6a0 },
+  { name: 'PINK', hex: 0xff6fb0 },
+  { name: 'PURPLE', hex: 0x9a6ee0 },
+  { name: 'YELLOW', hex: 0xffcf3a },
+  { name: 'ORANGE', hex: 0xff8a3c },
+];
+const TARGET_MS = 9000;
 
 export class BubblePopScene extends MinigameScene {
   constructor(p) {
@@ -15,7 +25,7 @@ export class BubblePopScene extends MinigameScene {
     this.id = 'bubble';
     this.title = 'Bubble Pop';
     this.icon = 'bubble';
-    this.howTo = 'Pop the sparkly bubbles before they float away! Golden bubbles are worth 40. Don\'t touch the thorny ones!';
+    this.howTo = 'The banner names a colour — pop THAT colour for big points and a streak! Other colours are safe but only worth a few points. Coin bubbles pay 40. Don\'t touch the thorny ones!';
     this.duration = 45000;
     this.coinRate = 0.28;
     this.bgTop = 0xbfe8f7;
@@ -33,9 +43,69 @@ export class BubblePopScene extends MinigameScene {
       g.endFill();
     }
     this.playLayer.addChild(g);
+
+    // target banner
+    this.streak = 0;
+    this.target = null;
+    this.targetT = 0;
+    const b = new PIXI.Container();
+    this.bannerBg = new PIXI.Graphics();
+    b.addChild(this.bannerBg);
+    this.bannerSwatch = new PIXI.Graphics();
+    b.addChild(this.bannerSwatch);
+    this.bannerText = new PIXI.Text('', {
+      fontFamily: 'GameFont', fontSize: 24, fontWeight: '900',
+      fill: 0xffffff, stroke: 0x1d3a5c, strokeThickness: 5,
+    });
+    this.bannerText.anchor.set(0, 0.5);
+    b.addChild(this.bannerText);
+    this.bannerBar = new PIXI.Graphics();
+    b.addChild(this.bannerBar);
+    b.position.set(W / 2, 96);
+    b.visible = false;
+    this.banner = b;
+    this.root.addChild(b); // above the bubbles
   }
 
-  begin() { this.spawnT = 300; }
+  begin() { this.spawnT = 300; this.newTarget(); }
+
+  newTarget() {
+    const options = COLOURS.filter((c) => c !== this.target);
+    this.target = choice(options);
+    this.targetT = TARGET_MS;
+    this.streak = 0;
+    const t = this.bannerText;
+    t.text = `Pop ${this.target.name}!`;
+    const w = t.width + 78;
+    const bg = this.bannerBg;
+    bg.clear();
+    bg.beginFill(0x1d3a5c, 0.9);
+    bg.drawRoundedRect(-w / 2, -26, w, 52, 26);
+    bg.endFill();
+    bg.lineStyle({ width: 4, color: this.target.hex });
+    bg.drawRoundedRect(-w / 2, -26, w, 52, 26);
+    bg.lineStyle(0);
+    const sw = this.bannerSwatch;
+    sw.clear();
+    sw.beginFill(this.target.hex);
+    sw.drawCircle(0, 0, 16);
+    sw.endFill();
+    sw.lineStyle({ width: 2.5, color: 0xffffff });
+    sw.drawCircle(0, 0, 16);
+    sw.lineStyle(0);
+    sw.beginFill(0xffffff, 0.8);
+    sw.drawEllipse(-5, -6, 5, 3);
+    sw.endFill();
+    sw.x = -w / 2 + 30;
+    t.x = -w / 2 + 54;
+    this.bannerW = w;
+    this.banner.visible = true;
+    this.banner.scale.set(1.25);
+    tween(this.banner.scale, { x: 1, y: 1 }, 320, { ease: Ease.backOut });
+    Sfx.sparkle();
+    // make sure a couple of the new colour are on the way
+    this.forceTarget = 2;
+  }
 
   spawn() {
     const { W, H } = this;
@@ -59,11 +129,19 @@ export class BubblePopScene extends MinigameScene {
       g.drawCircle(-r * 0.25, -r * 0.1, 3); g.drawCircle(r * 0.25, -r * 0.1, 3);
       g.endFill();
     } else {
-      const col = kind === 'gold' ? 0xffd35c : choice([0xaee2fb, 0xffc9e5, 0xd8c8fa, 0xbef0d8]);
-      g.beginFill(col, kind === 'gold' ? 0.92 : 0.55);
+      // ~45% of normal bubbles are the target colour, the rest are a mix
+      let colour = null;
+      if (kind === 'normal') {
+        const wantTarget = this.forceTarget > 0 || Math.random() < 0.45;
+        if (this.forceTarget > 0) this.forceTarget--;
+        colour = wantTarget && this.target ? this.target : choice(COLOURS.filter((cc) => cc !== this.target));
+      }
+      this.spawnColour = colour;
+      const col = kind === 'gold' ? 0xffd35c : colour.hex;
+      g.beginFill(col, kind === 'gold' ? 0.92 : 0.82);
       g.drawCircle(0, 0, r);
       g.endFill();
-      g.lineStyle({ width: 2.5, color: 0xffffff, alpha: 0.8 });
+      g.lineStyle({ width: 3, color: kind === 'gold' ? 0xffffff : darken(col, 0.28), alpha: 0.95 });
       g.drawCircle(0, 0, r);
       g.lineStyle(0);
       g.beginFill(0xffffff, 0.85);
@@ -80,7 +158,7 @@ export class BubblePopScene extends MinigameScene {
     c.eventMode = 'static';
     c.cursor = 'pointer';
     const item = {
-      c, kind, r,
+      c, kind, r, colour: kind === 'normal' ? this.spawnColour : null,
       vy: -(rand(1.3, 2.4) + (45000 - this.timeLeft) / 25000),
       sway: rand(0.5, 1.4),
       swayT: rand(0, 9),
@@ -103,11 +181,22 @@ export class BubblePopScene extends MinigameScene {
       tween(item.c, { alpha: 0 }, 220, { onDone: () => !item.c.destroyed && item.c.destroy() });
       return;
     }
-    const pts = item.kind === 'gold' ? 40 : Math.round(30 - item.r * 0.4); // small bubbles score more
+    const onTarget = item.kind === 'normal' && item.colour === this.target;
+    let pts;
+    if (item.kind === 'gold') pts = 40;
+    else if (onTarget) {
+      this.streak++;
+      pts = Math.round(36 - item.r * 0.4) + Math.min(30, (this.streak - 1) * 5); // small bubbles score more
+      if (this.streak >= 3) floatText(gp.x, gp.y - 44, `${this.streak} in a row!`, { size: 18, fill: 0xffe08a, stroke: 0x1d3a5c });
+      if (this.streak % 5 === 0) Sfx.perfect();
+    } else {
+      this.streak = 0; // wrong colour never hurts — it just pays less
+      pts = 5;
+    }
     Sfx.pop();
     sparkleBurst(gp.x, gp.y, {
       n: item.kind === 'gold' ? 16 : 9,
-      colors: item.kind === 'gold' ? [0xffd35c, 0xffffff, 0xffe9a8] : [0xffffff, 0xaee2fb, 0xffc9e5],
+      colors: item.kind === 'gold' ? [0xffd35c, 0xffffff, 0xffe9a8] : [0xffffff, item.colour.hex],
     });
     // pop ring
     const ring = new PIXI.Graphics();
@@ -117,12 +206,20 @@ export class BubblePopScene extends MinigameScene {
     this.playLayer.addChild(ring);
     tween(ring.scale, { x: 1.8, y: 1.8 }, 240, { ease: Ease.quadOut });
     tween(ring, { alpha: 0 }, 240, { onDone: () => !ring.destroyed && ring.destroy() });
-    this.addScore(Math.max(8, pts), gp.x, gp.y);
+    this.addScore(pts, gp.x, gp.y);
     item.c.destroy();
   }
 
   tick(ms) {
     const k = ms / 16.667;
+    this.targetT -= ms;
+    if (this.targetT <= 0) this.newTarget();
+    // countdown bar under the banner
+    const bw = this.bannerW - 52;
+    this.bannerBar.clear();
+    this.bannerBar.beginFill(this.target.hex);
+    this.bannerBar.drawRoundedRect(-bw / 2, 30, Math.max(4, bw * (this.targetT / TARGET_MS)), 5, 2.5);
+    this.bannerBar.endFill();
     this.spawnT -= ms;
     if (this.spawnT <= 0) {
       this.spawn();

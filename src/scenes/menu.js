@@ -2,12 +2,18 @@
 // with rich menu cards, live stats, a daily gift and a day/night switch.
 
 import { G } from '../game.js';
-import { save, persist, level, giftAvailable, claimGift } from '../save.js';
+import { save, persist, level, rankFor } from '../save.js';
+import { dailyState, dailyPending, openDailyPanel, todayStr } from '../daily.js';
+import { openRankings } from '../rankings.js';
+import { openSaveCode } from '../savecode.js';
+import { onlineEnabled, account } from '../online.js';
+import { openAccount } from '../accountpanel.js';
+import { nextMythicGoal } from '../mythic.js';
 import { ITEMS, styleScore } from '../items.js';
 import { isNight, toggleTheme, nite, niteSoft } from '../theme.js';
 import { makeHUD, makeBackground, makeIcon, iconButton, textStyle, PALETTE } from '../ui.js';
-import { characterAtHeight } from '../character.js';
-import { sparkleBurst, floatHearts, floatText, coinFly, confetti } from '../effects.js';
+import { characterAtHeight, playerOpts } from '../character.js';
+import { sparkleBurst, floatHearts } from '../effects.js';
 import { tween, Ease, killTweensOf } from '../tween.js';
 import { Sfx, setSoundEnabled, soundEnabled } from '../sound.js';
 import { rand, choice, darken, lighten, fmt, mixColor } from '../util.js';
@@ -154,7 +160,7 @@ export class MenuScene {
       this.ring.push(s);
     }
 
-    const ch = characterAtHeight(save.eq, save.skin, charH);
+    const ch = characterAtHeight(save.eq, save.skin, charH, playerOpts());
     ch.position.set(charX, floorY + 4);
     r.addChild(ch);
     this.char = ch;
@@ -223,14 +229,36 @@ export class MenuScene {
     else chips.position.set(charX, H - 26);
     r.addChild(chips);
 
-    // ---------- daily gift ----------
-    this.buildGift(portrait ? { x: W - 46, y: titleY + 158 } : { x: W - 48, y: H - 120 });
+    // ---------- daily rewards + rankings + save ----------
+    this.sidePos = portrait ? { x: W - 42, y: titleY + 150 } : { x: W - 48, y: H - 272 };
+    this.buildSideButtons();
 
     // ---------- sound + theme toggles ----------
     this.soundPos = { x: W - 44, y: H - 44 };
     this.themePos = { x: W - 44 - 58, y: H - 44 };
     this.buildSound();
     this.buildThemeToggle();
+    const sv = iconButton('save', 48, PALETTE.blue, () => openSaveCode());
+    sv.position.set(W - 44 - 116, H - 44);
+    r.addChild(sv);
+    // account button, only when online play is set up (see src/config.js)
+    if (onlineEnabled()) {
+      const drawAcct = () => {
+        if (this.acct && !this.acct.destroyed) this.acct.destroy({ children: true });
+        if (!this.root || this.root.destroyed) return;
+        const me = account();
+        const c = new PIXI.Container();
+        c.addChild(iconButton('face', 48, me ? PALETTE.mint : PALETTE.pink, () => openAccount(drawAcct)));
+        const lb = new PIXI.Text(me ? me.name : 'LOG IN', textStyle(11, 0xffffff, 0x8a3060, 3));
+        lb.anchor.set(0.5);
+        lb.position.set(0, -34);
+        c.addChild(lb);
+        c.position.set(W - 44 - 174, H - 44);
+        r.addChild(c);
+        this.acct = c;
+      };
+      drawAcct();
+    }
 
     // subtle nudge
     const hint = new PIXI.Text(this.hintText(), textStyle(15, 0xffffff, 0xd66d9e, 3));
@@ -242,6 +270,46 @@ export class MenuScene {
 
     this.hud = makeHUD(W);
     r.addChild(this.hud);
+
+    // Once a day, greet the player with their attendance reward.
+    if (dailyState().claimable && MenuScene.greeted !== todayStr()) {
+      MenuScene.greeted = todayStr();
+      openDailyPanel(this, () => this.buildSideButtons());
+    }
+  }
+
+  buildSideButtons() {
+    if (!this.root || this.root.destroyed) return;
+    if (this.sideBox && !this.sideBox.destroyed) this.sideBox.destroy({ children: true });
+    const box = new PIXI.Container();
+    const { x, y } = this.sidePos;
+    const add = (kind, color, label, dy, badge, fn) => {
+      const b = iconButton(kind, 50, color, fn);
+      b.position.set(x, y + dy);
+      box.addChild(b);
+      const t = new PIXI.Text(label, textStyle(11, 0xffffff, darken(color, 0.35), 3));
+      t.anchor.set(0.5);
+      t.position.set(x, y + dy + 35);
+      box.addChild(t);
+      if (badge > 0) {
+        const bg = new PIXI.Graphics();
+        bg.beginFill(0xe8263f); bg.drawCircle(0, 0, 11); bg.endFill();
+        bg.lineStyle({ width: 2, color: 0xffffff }); bg.drawCircle(0, 0, 11); bg.lineStyle(0);
+        bg.position.set(x + 19, y + dy - 19);
+        box.addChild(bg);
+        const bt = new PIXI.Text(String(badge), textStyle(13, 0xffffff, 0xe8263f, 0));
+        bt.anchor.set(0.5);
+        bt.position.set(x + 19, y + dy - 19);
+        box.addChild(bt);
+        tween(b.scale, { x: 1.1, y: 1.1 }, 600, { ease: Ease.sineInOut, yoyo: true, repeat: -1 });
+      }
+    };
+    const streak = dailyState().streak;
+    add('calendar', 0xe0596d, streak >= 2 ? `DAY ${streak}` : 'DAILY', 0, dailyPending(), () => openDailyPanel(this, () => this.buildSideButtons()));
+    add('medal', PALETTE.purple, 'RANKS', 78, 0, () => openRankings(this));
+    this.root.addChild(box);
+    this.sideBox = box;
+    if (this.hud) this.root.addChild(this.hud);
   }
 
   makeCard(def, w, h) {
@@ -327,67 +395,6 @@ export class MenuScene {
     return c;
   }
 
-  buildGift(pos) {
-    if (this.giftBtn && !this.giftBtn.destroyed) this.giftBtn.destroy({ children: true });
-    const avail = giftAvailable();
-    const c = new PIXI.Container();
-    const g = new PIXI.Graphics();
-    const col = avail ? 0xe0596d : 0xb9a8b8;
-    // gift box
-    g.beginFill(darken(col, 0.4), 0.5);
-    g.drawRoundedRect(-24, -18 + 4, 48, 40, 8);
-    g.endFill();
-    g.beginFill(col);
-    g.drawRoundedRect(-24, -18, 48, 40, 8);
-    g.endFill();
-    g.beginFill(lighten(col, 0.35));
-    g.drawRect(-5, -18, 10, 40);
-    g.drawRoundedRect(-28, -26, 56, 14, 7);
-    g.endFill();
-    // bow
-    g.beginFill(lighten(col, 0.15));
-    g.moveTo(0, -26);
-    g.bezierCurveTo(-16, -40, -20, -24, 0, -24);
-    g.moveTo(0, -26);
-    g.bezierCurveTo(16, -40, 20, -24, 0, -24);
-    g.endFill();
-    c.addChild(g);
-    const label = new PIXI.Text(avail ? 'GIFT!' : 'tomorrow', textStyle(avail ? 14 : 11, 0xffffff, 0x8a3060, 3));
-    label.anchor.set(0.5);
-    label.y = 34;
-    c.addChild(label);
-    if (save.giftStreak >= 2) {
-      const streakT = new PIXI.Text(`🔥 day ${save.giftStreak}`, textStyle(11, 0xffe08a, 0x8a3060, 3));
-      streakT.anchor.set(0.5);
-      streakT.y = 50;
-      c.addChild(streakT);
-    }
-    c.position.set(pos.x, pos.y);
-    c.eventMode = 'static';
-    c.cursor = 'pointer';
-    c.on('pointertap', () => {
-      if (!giftAvailable()) {
-        Sfx.tap();
-        floatText(pos.x, pos.y - 40, 'Come back tomorrow! ✨', { size: 18, fill: 0xffffff, stroke: 0x9a8aa8 });
-        return;
-      }
-      const { amount, streak } = claimGift();
-      Sfx.buy();
-      sparkleBurst(pos.x, pos.y, { n: 20, power: 1.2 });
-      floatText(pos.x, pos.y - 46, streak >= 2 ? `Day ${streak} streak! +${amount}` : `Daily gift +${amount}!`, { size: 22, fill: 0xffe08a });
-      if (streak >= 2) floatText(pos.x, pos.y - 76, 'Come back daily — it grows! 🔥', { size: 15, fill: 0xffffff, stroke: 0xd66d9e, dur: 1600 });
-      const tgt = this.hud.coinTarget();
-      coinFly(pos.x, pos.y, tgt.x, tgt.y, 8, () => this.hud.bumpCoin());
-      this.buildGift(pos);
-    });
-    if (avail) {
-      tween(c.scale, { x: 1.1, y: 1.1 }, 600, { ease: Ease.sineInOut, yoyo: true, repeat: -1 });
-    }
-    this.root.addChild(c);
-    this.giftBtn = c;
-    if (this.hud) this.root.addChild(this.hud);
-  }
-
   buildSound() {
     if (this.soundBtn && !this.soundBtn.destroyed) this.soundBtn.destroy({ children: true });
     const sb = iconButton(soundEnabled() ? 'sound' : 'mute', 48, PALETTE.purple, () => {
@@ -416,10 +423,12 @@ export class MenuScene {
 
   hintText() {
     if (save.plays === 0) return 'Play minigames to earn coins for fabulous outfits!';
-    if (giftAvailable() && save.plays > 2) return 'Your daily gift is waiting! 🎀';
+    if (dailyPending() > 0) return 'A daily reward is ready to claim!';
     if (save.owned.length < 6) return 'Visit the Wardrobe — new styles are waiting!';
     if (save.shows === 0) return 'Try the Fashion Show and wow the judges!';
-    return `Level ${level()} stylist — keep sparkling! ✨`;
+    const goal = nextMythicGoal();
+    if (goal && level() >= 6) return `Next Mythic: ${goal.item.name} — trials ${goal.rep.done}/${goal.rep.total}`;
+    return `Level ${level()} ${rankFor().name} — keep sparkling!`;
   }
 
   update(ms) {
