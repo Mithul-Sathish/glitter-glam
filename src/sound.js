@@ -15,6 +15,9 @@ function ac() {
   return ctx;
 }
 
+/** The shared audio context, or null until the first tap has unlocked audio. */
+export function audioContext() { return ctx; }
+
 // Unlock audio on first user gesture (mobile requirement).
 export function initSound() {
   const unlock = () => { ac(); window.removeEventListener('pointerdown', unlock); };

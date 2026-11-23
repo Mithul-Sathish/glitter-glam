@@ -72,6 +72,7 @@ the save.
 - Fully self-contained: no external requests (fonts, CDNs, analytics), no
   login, instant load — iframe-friendly for game portals.
 - Audio starts only after a user gesture (autoplay-policy safe).
+- Background music is generated live in `src/music.js` (no audio files): a home theme, a quicker minigame theme and a runway theme. The note button on the menu turns it on or off and the choice is saved.
 - `src/portal.js` is a thin adapter for a portal SDK. No SDK script is
   loaded by default, so every call is a no-op and the page makes no outside
   requests. To publish on CrazyGames, add their SDK script tag back to

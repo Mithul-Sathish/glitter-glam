@@ -22,6 +22,7 @@ const JUDGES = [
 
 export class FashionShowScene {
   constructor(params) {
+    this.musicTheme = 'runway';
     this.params = params;
     this.resizeMode = 'scale';
     this.alive = true;

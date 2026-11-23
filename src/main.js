@@ -4,6 +4,7 @@ import { G } from './game.js';
 import { updateTweens, tween, Ease } from './tween.js';
 import { updateEffects, fxLayer, ambientSparkle } from './effects.js';
 import { initSound, setSoundEnabled } from './sound.js';
+import { initMusic, setMusicTheme } from './music.js';
 import { save } from './save.js';
 import { portalInit } from './portal.js';
 import { MenuScene } from './scenes/menu.js';
@@ -45,6 +46,7 @@ app.stage.addChild(fxLayer);
 
 setSoundEnabled(save.sound !== false);
 initSound();
+initMusic(save.music !== false);
 portalInit();
 
 let current = null;
@@ -65,6 +67,8 @@ function mount(SceneClass, params) {
   scene.builtH = G.H;
   current = scene;
   G.scene = scene;
+  // minigames carry instructions (howTo); the fashion show names its own theme
+  setMusicTheme(scene.musicTheme || (scene.howTo ? 'games' : 'home'));
 }
 
 /** Sparkly circle-wipe transition between scenes. */
