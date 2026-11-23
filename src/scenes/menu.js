@@ -6,6 +6,8 @@ import { save, persist, level, rankFor } from '../save.js';
 import { dailyState, dailyPending, openDailyPanel, todayStr } from '../daily.js';
 import { openRankings } from '../rankings.js';
 import { openSaveCode } from '../savecode.js';
+import { onlineEnabled, account } from '../online.js';
+import { openAccount } from '../accountpanel.js';
 import { nextMythicGoal } from '../mythic.js';
 import { ITEMS, styleScore } from '../items.js';
 import { isNight, toggleTheme, nite, niteSoft } from '../theme.js';
@@ -239,6 +241,24 @@ export class MenuScene {
     const sv = iconButton('save', 48, PALETTE.blue, () => openSaveCode());
     sv.position.set(W - 44 - 116, H - 44);
     r.addChild(sv);
+    // account button, only when online play is set up (see src/config.js)
+    if (onlineEnabled()) {
+      const drawAcct = () => {
+        if (this.acct && !this.acct.destroyed) this.acct.destroy({ children: true });
+        if (!this.root || this.root.destroyed) return;
+        const me = account();
+        const c = new PIXI.Container();
+        c.addChild(iconButton('face', 48, me ? PALETTE.mint : PALETTE.pink, () => openAccount(drawAcct)));
+        const lb = new PIXI.Text(me ? me.name : 'LOG IN', textStyle(11, 0xffffff, 0x8a3060, 3));
+        lb.anchor.set(0.5);
+        lb.position.set(0, -34);
+        c.addChild(lb);
+        c.position.set(W - 44 - 174, H - 44);
+        r.addChild(c);
+        this.acct = c;
+      };
+      drawAcct();
+    }
 
     // subtle nudge
     const hint = new PIXI.Text(this.hintText(), textStyle(15, 0xffffff, 0xd66d9e, 3));

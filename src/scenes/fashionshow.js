@@ -1,6 +1,7 @@
 // Fashion Show: you and three rivals strut the red carpet, the crowd goes
 // wild, judges hold up score cards, and the best outfit takes the crown.
 
+import { submitScore } from '../online.js';
 import { G } from '../game.js';
 import { save, earnCoins, persist, level, todayStats } from '../save.js';
 import { styleScore, randomOutfit, randomLook, SKINS } from '../items.js';
@@ -531,6 +532,7 @@ export class FashionShowScene {
     todayStats().shows++;
     const mine = this.contestants[0];
     save.bestShow = Math.max(save.bestShow || 0, mine.rating);
+    submitScore('runway', Math.round(mine.rating * 10));
     if (playerPlace === 1) {
       save.wins++;
       save.winStreak = (save.winStreak || 0) + 1;

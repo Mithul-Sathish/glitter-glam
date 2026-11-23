@@ -106,6 +106,21 @@ export function persist() {
     localStorage.setItem(KEY, json);
     localStorage.setItem(BACKUP_KEY, json);
   } catch (e) { /* private mode etc. */ }
+  for (const fn of persistListeners) { try { fn(); } catch (e) { /* never block a save */ } }
+}
+
+const persistListeners = [];
+/** Run fn after every save (used to sync a signed-in account). */
+export function onPersist(fn) { persistListeners.push(fn); }
+
+/** Replace the whole save with a plain save object (e.g. from an account). */
+export function loadSaveData(data) {
+  if (!data || typeof data !== 'object' || !Array.isArray(data.owned) || typeof data.coins !== 'number') return false;
+  const merged = merge(data);
+  for (const k of Object.keys(save)) delete save[k];
+  Object.assign(save, merged);
+  persist();
+  return true;
 }
 
 // Save when the tab is hidden or closed, so a refresh never loses a round.
@@ -131,12 +146,7 @@ export function importSave(code) {
     const bin = atob(clean);
     const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
     const data = JSON.parse(new TextDecoder().decode(bytes));
-    if (!data || typeof data !== 'object' || !Array.isArray(data.owned) || typeof data.coins !== 'number') return false;
-    const merged = merge(data);
-    for (const k of Object.keys(save)) delete save[k];
-    Object.assign(save, merged);
-    persist();
-    return true;
+    return loadSaveData(data);
   } catch (e) { return false; }
 }
 

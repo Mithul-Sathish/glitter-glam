@@ -10,6 +10,7 @@ import { GAME_NAMES, GAME_IDS, mythicTally } from './mythic.js';
 import { makePanel, makeIcon, iconButton, textStyle, PALETTE } from './ui.js';
 import { tween, Ease } from './tween.js';
 import { fmt } from './util.js';
+import { onlineEnabled, account, fetchBoard } from './online.js';
 
 // Score that earns the top (Diamond) medal in each game.
 export const DIAMOND = { starcatch: 1200, memory: 800, bubble: 1000, rhythm: 1500, stylematch: 700, simon: 900 };
@@ -54,7 +55,10 @@ export function openRankings(scene) {
   const fit = Math.min(1, (H - 12) / ph);
   const close = () => { if (!ov.destroyed) tween(ov, { alpha: 0 }, 180, { onDone: () => !ov.destroyed && ov.destroy({ children: true }) }); };
 
-  const render = (detail) => {
+  let view = 0; // bumps on every render so late network answers are ignored
+  const render = (detail, world = false) => {
+    const myView = ++view;
+    if (detail === 'runway') world = true;
     box.removeChildren().forEach((c) => c.destroy({ children: true }));
     box.addChild(makePanel(pw, ph, { border: PALETTE.purple }));
     const top = -ph / 2;
@@ -67,38 +71,94 @@ export function openRankings(scene) {
       const back = iconButton('back', 40, PALETTE.purple, () => render(null));
       back.position.set(-pw / 2 + 30, top + 30);
       box.addChild(back);
-      const t = new PIXI.Text(GAME_NAMES[detail] + ' League', textStyle(22, PALETTE.pink, 0xffffff, 0));
+      const online = onlineEnabled();
+      const gameName = detail === 'runway' ? 'Runway' : GAME_NAMES[detail];
+      const t = new PIXI.Text(gameName + (world ? ' World' : ' League'), textStyle(22, PALETTE.pink, 0xffffff, 0));
       t.anchor.set(0.5);
       t.position.set(0, top + 32);
       box.addChild(t);
-      const sub = new PIXI.Text('You against the boutique\'s rival stylists', { ...textStyle(12, PALETTE.purple, 0xffffff, 0), fontWeight: '700' });
+      const sub = new PIXI.Text(
+        world ? (detail === 'runway' ? 'Best runway rating of real players' : 'Best scores of real players')
+          : 'You against the boutique\'s rival stylists',
+        { ...textStyle(12, PALETTE.purple, 0xffffff, 0), fontWeight: '700' });
       sub.anchor.set(0.5);
       sub.position.set(0, top + 58);
       box.addChild(sub);
-      leagueFor(detail).forEach((row, i) => {
-        const y = top + 98 + i * 47;
+      // Boutique / World switch (only when online play is set up)
+      if (online && detail !== 'runway') {
+        [['Boutique', false], ['World', true]].forEach(([label, w], i) => {
+          const on = w === world;
+          const tab = new PIXI.Container();
+          const tg = new PIXI.Graphics();
+          tg.beginFill(on ? PALETTE.pink : 0xf3e3ef);
+          tg.drawRoundedRect(-58, -15, 116, 30, 15);
+          tg.endFill();
+          tab.addChild(tg);
+          const tt = new PIXI.Text(label, { ...textStyle(14, on ? 0xffffff : PALETTE.purple, 0xffffff, 0), fontWeight: '900' });
+          tt.anchor.set(0.5);
+          tab.addChild(tt);
+          tab.position.set(i ? 62 : -62, top + 88);
+          tab.eventMode = 'static';
+          tab.cursor = 'pointer';
+          tab.on('pointertap', () => render(detail, w));
+          box.addChild(tab);
+        });
+      }
+      const listTop = top + (online ? 130 : 98);
+      const step = online ? 44 : 47;
+      const drawRow = (i, place, name, scoreText, you, medal) => {
+        const y = listTop + i * step;
         const rw = pw - 40;
         const g = new PIXI.Graphics();
-        g.beginFill(row.you ? 0xffe9b0 : 0xfaf1f8);
-        g.drawRoundedRect(-rw / 2, y - 20, rw, 40, 12);
+        g.beginFill(you ? 0xffe9b0 : 0xfaf1f8);
+        g.drawRoundedRect(-rw / 2, y - 19, rw, 38, 12);
         g.endFill();
-        if (row.you) { g.lineStyle({ width: 2.5, color: PALETTE.gold }); g.drawRoundedRect(-rw / 2, y - 20, rw, 40, 12); g.lineStyle(0); }
+        if (you) { g.lineStyle({ width: 2.5, color: PALETTE.gold }); g.drawRoundedRect(-rw / 2, y - 19, rw, 38, 12); g.lineStyle(0); }
         box.addChild(g);
-        const place = new PIXI.Text('#' + (i + 1), textStyle(16, i < 3 ? 0xc78a00 : 0x9a8aa8, 0xffffff, 0));
-        place.anchor.set(0, 0.5);
-        place.position.set(-rw / 2 + 12, y);
-        box.addChild(place);
-        const nm = new PIXI.Text(row.name, { ...textStyle(16, PALETTE.text, 0xffffff, 0), fontWeight: row.you ? '900' : '700' });
+        const pl = new PIXI.Text('#' + place, textStyle(16, place <= 3 ? 0xc78a00 : 0x9a8aa8, 0xffffff, 0));
+        pl.anchor.set(0, 0.5);
+        pl.position.set(-rw / 2 + 12, y);
+        box.addChild(pl);
+        const nm = new PIXI.Text(name, { ...textStyle(16, PALETTE.text, 0xffffff, 0), fontWeight: you ? '900' : '700' });
         nm.anchor.set(0, 0.5);
-        nm.position.set(-rw / 2 + 58, y);
+        nm.position.set(-rw / 2 + 62, y);
         box.addChild(nm);
-        const m = medalFor(detail, row.score);
-        if (m) { const mi = makeIcon('medal', 22, m.color); mi.position.set(rw / 2 - 96, y); box.addChild(mi); }
-        const sc = new PIXI.Text(fmt(row.score), textStyle(17, PALETTE.purple, 0xffffff, 0));
+        if (medal) { const mi = makeIcon('medal', 22, medal.color); mi.position.set(rw / 2 - 96, y); box.addChild(mi); }
+        const sc = new PIXI.Text(scoreText, textStyle(17, PALETTE.purple, 0xffffff, 0));
         sc.anchor.set(1, 0.5);
         sc.position.set(rw / 2 - 12, y);
         box.addChild(sc);
-      });
+      };
+      const note = (text, y) => {
+        const n = new PIXI.Text(text, { ...textStyle(14, 0x9a6ab0, 0xffffff, 0), fontWeight: '700', align: 'center', wordWrap: true, wordWrapWidth: pw - 60 });
+        n.anchor.set(0.5);
+        n.position.set(0, y);
+        box.addChild(n);
+        return n;
+      };
+      if (world) {
+        const show = (v) => (detail === 'runway' ? (v / 10).toFixed(1) + ' / 10' : fmt(v));
+        const wait = note('Loading the world ranking…', top + ph / 2);
+        fetchBoard(detail).then((b) => {
+          if (ov.destroyed || myView !== view) return;
+          wait.destroy();
+          const me = account();
+          const rows = b.top.slice(0, 9);
+          rows.forEach((r, i) => drawRow(i, r.rank, r.name, show(r.score), !!me && r.name === me.name, detail === 'runway' ? null : medalFor(detail, r.score)));
+          let n = rows.length;
+          if (b.you && b.you.rank > rows.length) { drawRow(n, b.you.rank, b.you.name, show(b.you.score), true, null); n++; }
+          const foot = !rows.length ? 'No scores yet. Be the first!'
+            : !me ? 'Log in from the home screen to join the world ranking.'
+              : !b.you ? 'Play a round to get on the board!'
+                : `You are #${b.you.rank} of ${fmt(b.total)} players`;
+          note(foot, Math.min(top + ph - 30, listTop + n * step + 8));
+        }).catch((e) => {
+          if (ov.destroyed || myView !== view) return;
+          wait.text = e.message || 'The world ranking is not available right now.';
+        });
+        return;
+      }
+      leagueFor(detail).forEach((row, i) => drawRow(i, i + 1, row.name, fmt(row.score), row.you, medalFor(detail, row.score)));
       return;
     }
 
@@ -210,6 +270,15 @@ export function openRankings(scene) {
     rh.anchor.set(0.5);
     rh.position.set(0, ry - 6);
     box.addChild(rh);
+    if (onlineEnabled()) {
+      // tap through to the world runway ranking
+      rh.text = 'RUNWAY RECORD  •  WORLD RANKING ›';
+      rh.style.fill = PALETTE.pink;
+      rh.eventMode = 'static';
+      rh.cursor = 'pointer';
+      rh.hitArea = new PIXI.Rectangle(-pw / 2 + 10, -16, pw - 20, 32);
+      rh.on('pointertap', () => render('runway', true));
+    }
     stats.forEach(([icon, label], i) => {
       const cx = -pw / 2 + 15 + cellW * i + cellW / 2;
       const ic = makeIcon(icon, 22);

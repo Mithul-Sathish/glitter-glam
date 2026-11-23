@@ -9,6 +9,7 @@ import { sparkleBurst, coinFly, confetti, floatText } from '../effects.js';
 import { tween, Ease, delay } from '../tween.js';
 import { Sfx } from '../sound.js';
 import { fmt } from '../util.js';
+import { submitScore } from '../online.js';
 
 export class MinigameScene {
   // subclasses set: id, title, icon, howTo, duration (ms, 0 = untimed), coinRate
@@ -211,6 +212,7 @@ export class MinigameScene {
     const boosted = useBoost();
     if (boosted) coins *= 2;
     const isRecord = recordScore(this.id, this.score);
+    submitScore(this.id, this.score);
     const before = level();
     const { leveledUp, levels } = earnCoins(coins);
     const lvBonus = levels.reduce((a, l) => a + l.reward, 0);

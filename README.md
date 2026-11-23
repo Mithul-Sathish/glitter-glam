@@ -51,7 +51,12 @@ players) along with runway records.
 and outfit change, again whenever the tab is hidden or closed, and to a backup
 key that is used if the main save is damaged. The save button on the home
 screen gives a copyable save code for moving progress to another browser or
-device. There are no accounts and no server.
+device.
+
+**Accounts and world rankings (optional)**: the small server in `server/`
+adds nickname accounts, cloud saves and real-player rankings. It is off unless
+`ONLINE_API` is set in `src/config.js`; see `server/README.md`. Left empty, the
+game has no accounts and makes no network requests.
 
 🌙 **Night mode**: the moon button on the home screen switches the whole
 boutique into a starry evening theme (crescent moon, deepened colors, brighter
