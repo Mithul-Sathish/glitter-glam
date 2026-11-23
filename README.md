@@ -63,18 +63,19 @@ boutique into a starry evening theme (crescent moon, deepened colors, brighter
 sparkles); every scene keeps its hue identity, just after dark. Persisted with
 the save.
 
-## Desktop & CrazyGames readiness
+## Desktop & portal readiness
 
 - Global UI scale: the interface renders at 1× on phones and up to 2× on
   large screens, so nothing looks tiny on desktop; text re-rasterizes crisply.
 - Keyboard controls on desktop: Runway Rhythm (arrows / D·F·J / 1-2-3) and
   Encore (arrows / 1-4); every game also plays with mouse or touch.
 - Fully self-contained: no external requests (fonts, CDNs, analytics), no
-  login, instant load — iframe-friendly for portals like CrazyGames.
+  login, instant load — iframe-friendly for game portals.
 - Audio starts only after a user gesture (autoplay-policy safe).
-- CrazyGames SDK v3 wired via `src/portal.js` (init, gameplayStart/Stop,
-  happytime on wins/level-ups); every call no-ops when the SDK is absent,
-  so the same build runs anywhere.
+- `src/portal.js` is a thin adapter for a portal SDK. No SDK script is
+  loaded by default, so every call is a no-op and the page makes no outside
+  requests. To publish on CrazyGames, add their SDK script tag back to
+  `index.html`.
 
 ## Tech notes
 
